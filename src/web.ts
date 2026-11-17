@@ -21,10 +21,15 @@ import { asRecord, assertIsoTime, assertTimeRange, isoNoMillis, optionalString, 
 import type { CalendarEvent } from './ical.js'
 import type { AvailabilityInput, AvailabilityResult } from './availability.js'
 import { DRAFT_BODY_LIMIT, type DraftModel } from './quick-draft.js'
+import { loadPersonConnection, peopleEnabled, personFor, type PeopleOptions, type PersonConnection, type RequestIdentityLike } from './people.js'
+import { createMultiService } from './multi.js'
 
 /** 面板与浏览器说话的同源路由。 */
 export const SETTINGS_ROUTE = '/_dsh/dsh-calendar/settings'
 export const DRAFT_ROUTE = '/_dsh/dsh-calendar/draft'
+/** The routes the browser really calls: they go through DSH's own request pipeline, so its sign-in covers them. */
+export const SETTINGS_API_ROUTE = '/api/dsh-calendar/settings'
+export const DRAFT_API_ROUTE = '/api/dsh-calendar/draft'
 
 /** 回环主机名白名单；带端口会被拆掉，IPv6 字面量保留方括号。 */
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
@@ -59,6 +64,26 @@ export function postVerdict(headers: Record<string, unknown>): { status: number;
   const site = headers['sec-fetch-site']
   if (typeof site === 'string' && site !== '' && site !== 'same-origin' && site !== 'none') {
     return { status: 403, message: `a ${site} request may not write dsh-calendar events` }
+  }
+  return undefined
+}
+
+/**
+ * Gate for a request that arrived through DSH's request pipeline (sign-in already checked there):
+ * JSON only, and a browser-sent Origin or Sec-Fetch-Site must say same-origin. Unlike the
+ * loopback-only route this works behind a reverse proxy.
+ */
+export function fetchVerdict(request: Request): { status: number; message: string } | undefined {
+  if (!(request.headers.get('content-type') ?? '').toLowerCase().includes('application/json')) {
+    return { status: 415, message: 'dsh-calendar accepts application/json only' }
+  }
+  const site = request.headers.get('sec-fetch-site')
+  if (site && site !== 'same-origin' && site !== 'none') return { status: 403, message: `a ${site} request may not use dsh-calendar` }
+  const origin = request.headers.get('origin')
+  if (origin) {
+    try {
+      if (new URL(origin).host !== (request.headers.get('host') || new URL(request.url).host)) return { status: 403, message: 'cross-origin request refused' }
+    } catch { return { status: 403, message: 'invalid origin' } }
   }
   return undefined
 }
@@ -161,6 +186,12 @@ export interface CalendarSettingsBackendOptions {
   probeFactory?: (config: CalendarConfig) => Promise<{ count: number; sample: string[] }>
   env?: NodeJS.ProcessEnv
   draftModel?: () => DraftModel | undefined
+  /** Several people share this DSH: who is who, and where each person's connection file lives. */
+  people?: PeopleOptions
+  /** The `requestIdentity` service right now, if a sign-in plugin provides one. */
+  identity?: () => RequestIdentityLike | undefined
+  /** Set on a per-person backend: its calendars and whether it may write. */
+  scope?: { person: string; calendars: string[]; readOnly: boolean }
   settings?: CalendarSettingsFace
   /** 宿主 ctx：用来懒接入 settings 服务（不赌子 fiber 的时序）。 */
   ctx?: any
@@ -297,6 +328,8 @@ export class CalendarSettingsBackend {
     return {
       configured,
       ...(reason !== undefined ? { reason } : {}),
+      ...(this.options.scope !== undefined ? { person: this.options.scope.person, calendars: this.options.scope.calendars } : {}),
+      readOnly: this.options.scope?.readOnly === true,
       settingsAvailable: this.settings !== undefined,
       ...(this.settings?.kind !== undefined ? { settingsKind: this.settings.kind } : {}),
       ...(this.options.settingsReason !== undefined ? { settingsReason: this.options.settingsReason } : {}),
@@ -394,7 +427,63 @@ export class CalendarSettingsBackend {
     } finally { res.off?.('close', disconnect) }
   }
 
-  private async dispatchDraft(body: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
+  private scoped = new Map<string, { key: string; backend: CalendarSettingsBackend }>()
+
+  /** The backend that answers this request: this one, or the signed-in person's own. */
+  private async backendFor(): Promise<CalendarSettingsBackend | Response> {
+    const people = this.options.people
+    if (people === undefined || !peopleEnabled(people)) return this
+    const fail = (status: number, message: string) => jsonResponse(status, { ok: false, error: { code: 'forbidden', message } })
+    const service = this.options.identity?.()
+    if (service === undefined) return fail(503, 'dsh-calendar needs a sign-in plugin that provides requestIdentity, and none is running.')
+    const identity = service.current()
+    if (identity === null) return fail(401, 'Not signed in.')
+    const person = await personFor(people, identity.id, (message) => console.warn(message))
+    if (person === undefined) return fail(403, 'You have no calendar here.')
+    let connection: PersonConnection | undefined
+    try { connection = people.connectionsDir ? await loadPersonConnection(people.connectionsDir, person) : undefined }
+    catch (error) { console.warn(`dsh-calendar: connection file of ${person}: ${(error as Error).message}`) }
+    if (connection === undefined) {
+      return this.scopedBackend(person, { config: {}, calendars: [], readOnly: true }, 'unconfigured')
+    }
+    return this.scopedBackend(person, connection, JSON.stringify(connection))
+  }
+
+  private scopedBackend(person: string, connection: PersonConnection, key: string): CalendarSettingsBackend {
+    const known = this.scoped.get(person)
+    if (known !== undefined && known.key === key) return known.backend
+    const service = connection.calendars.length > 0 ? createMultiService(connection, { env: this.options.env ?? {} }) : undefined
+    const backend = new CalendarSettingsBackend({
+      config: connection.config,
+      env: this.options.env ?? {},
+      draftModel: this.options.draftModel,
+      scope: { person, calendars: connection.calendars.map((calendar) => calendar.name), readOnly: connection.readOnly },
+      ...(service !== undefined ? { serviceFactory: () => service } : {}),
+    })
+    this.scoped.set(person, { key, backend })
+    return backend
+  }
+
+  /** Request entry for DSH's own pipeline: identity, same-origin gate, JSON body, action. */
+  async fetch(request: Request, draft = false): Promise<Response> {
+    if (request.method !== 'POST') return jsonResponse(405, { ok: false, error: { code: 'method', message: 'POST only' } })
+    const verdict = fetchVerdict(request)
+    if (verdict !== undefined) return jsonResponse(verdict.status, { ok: false, error: { code: verdict.status === 415 ? 'unsupported-media-type' : 'forbidden', message: verdict.message } })
+    const backend = await this.backendFor()
+    if (backend instanceof Response) return backend
+    try {
+      const raw = await request.text()
+      if (raw.length > (draft ? DRAFT_BODY_LIMIT : 256 * 1024)) throw new Error('Request too large.')
+      const body = asRecord(JSON.parse(raw))
+      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+      const value = draft ? await backend.dispatchDraft(body, signal) : await backend.dispatch(body, signal)
+      return jsonResponse(200, { ok: true, value })
+    } catch (error) {
+      return jsonResponse(400, { ok: false, error: { code: 'rejected', message: error instanceof Error ? error.message : String(error) } })
+    }
+  }
+
+  async dispatchDraft(body: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
     const model = this.options.draftModel?.()
     if (body.action === 'models') return { models: model ? await model.routes(signal) : [] }
     if (body.action !== 'suggest' || !model) throw new Error('请在 DSH 中配置日程解析模型。')
@@ -402,7 +491,7 @@ export class CalendarSettingsBackend {
   }
 
   /** 动作分发。每个动作自己校验参数，错误信息面向用户（中文，面板直接显示）。 */
-  private async dispatch(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+  async dispatch(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
     const action = typeof body.action === 'string' ? body.action : ''
     if (action === 'status' || action === 'connection') return this.connection()
     if (action === 'discoverICloud') {
@@ -476,6 +565,10 @@ export class CalendarSettingsBackend {
 }
 
 /** POST body 读取：上限 256 KiB，超限或非 JSON 直接拒绝。 */
+function jsonResponse(status: number, payload: unknown): Response {
+  return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })
+}
+
 async function readJsonBody(req: any, limit = 256 * 1024): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
@@ -568,5 +661,19 @@ export function installCalendarSettingsWeb(ctx: any, backend: CalendarSettingsBa
         throw error
       }
     }, 'dsh-calendar: web routes')
+  })
+}
+
+/**
+ * Mount the panel's routes on DSH's own request pipeline (`connection.fetch`), the way the import
+ * route is mounted. DSH's sign-in applies to them and a sign-in plugin's `requestIdentity` can see
+ * who asks, so they work behind a reverse proxy and can tell people apart.
+ */
+export function installCalendarFetchRoutes(ctx: any, backend: CalendarSettingsBackend): void {
+  ctx.inject?.(['connection'], (host: any) => {
+    const register = host.connection?.fetch?.register
+    if (typeof register !== 'function') return
+    register.call(host.connection.fetch, { path: SETTINGS_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
+    register.call(host.connection.fetch, { path: DRAFT_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request, true) })
   })
 }

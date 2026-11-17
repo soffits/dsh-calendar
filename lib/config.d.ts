@@ -16,6 +16,12 @@ export interface CalendarOAuthCredentials {
 }
 /** 插件配置：可在 profile 的 cordis.patch.yml 覆盖 calendar 行的整个 config。 */
 export interface CalendarConfig {
+    /** `false` registers no model tools (the panel stays). */
+    tools?: boolean;
+    people?: Record<string, string>;
+    peopleFile?: string;
+    peopleKey?: string;
+    connectionsDir?: string;
     /** provider 预设；默认 custom。 */
     provider?: CalendarProvider;
     /** 完整日历集合 URL；custom / icloud 必填，google / nextcloud 可由此手填覆盖预设。 */

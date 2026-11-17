@@ -32,6 +32,14 @@ export const Config: z = z.object({
   refreshToken: z.string().role('secret').volatile(),
   tokenUrl: z.string().volatile(),
   proxyUrl: z.string().volatile(),
+  /** `false` turns the model-facing tools off and keeps the panel. */
+  tools: z.boolean().volatile(),
+  /** Several people share this DSH: a verified user id -> person id map, or a JSON file holding one (under `peopleKey`). */
+  people: z.dict(z.string()).volatile(),
+  peopleFile: z.string().volatile(),
+  peopleKey: z.string().volatile(),
+  /** Folder of per-person connection files (`<person>.json`), read on the server only. */
+  connectionsDir: z.string().volatile(),
   /** 老 settings.yaml 的 dsh-calendar 段是否已搬进 profile（只写一次）。 */
   legacySettingsImported: z.boolean().volatile(),
 })

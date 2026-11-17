@@ -9,7 +9,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
         const h = React.createElement;
         // @calendar-ui
         // Resolve against the Harness document base, including any reverse-proxy prefix.
-        const ROUTE = "_dsh/dsh-calendar/settings";
+        const ROUTE = "api/dsh-calendar/settings";
         const IMPORT_ROUTE = "api/dsh-calendar/import";
         /** 三视图；order 决定 tab 顺序。 */
         const VIEWS = ["month", "week", "agenda"];
@@ -685,6 +685,8 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
             const meta = [];
             if (event.location)
                 meta.push(event.location);
+            if (event.calendar)
+                meta.push(event.calendar);
             if (event.rrule)
                 meta.push(humanRepeat(event.rrule));
             else if (event.isOccurrence)
@@ -2141,6 +2143,10 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     notify(t("demo.banner"));
                     return;
                 }
+                if (conn?.readOnly === true) {
+                    notify(calendarText("这个日历是只读的。", "This calendar is read-only."));
+                    return;
+                }
                 setConfirmDelete(false);
                 setFormError(null);
                 setDraft(draftAt(day, hour));
@@ -2308,7 +2314,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 }
                 const calendarProps = { anchor, events: visibleEvents, conflicted, onPick: openEvent, onCreateAt: createAt };
                 const calendar = view === "week"
-                    ? h(WeekView, { ...calendarProps, onReschedule: demo ? undefined : reschedule })
+                    ? h(WeekView, { ...calendarProps, onReschedule: demo || conn?.readOnly === true ? undefined : reschedule })
                     : view === "agenda" ? h(AgendaView, calendarProps) : h(MonthView, calendarProps);
                 const message = !demo && !showCalendar
                     ? calendarText("当前日历已隐藏。", "The connected calendar is hidden.")

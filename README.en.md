@@ -78,3 +78,14 @@ If the plugin helps, a Star makes it easier for others to discover. Report probl
 
 <a id="what-it-does"></a>
 <a id="requirements-and-configuration"></a>
+
+## Several people on one DSH
+
+Set `people` (verified user id → person) or `peopleFile` (+ `peopleKey`), and `connectionsDir`. Each person gets `connectionsDir/<person>.json`:
+
+```json
+{ "provider": "icloud", "username": "me@icloud.com", "passwordFile": "/path/to/app-password",
+  "readOnly": true, "calendars": [{ "name": "Personal", "url": "https://caldav.icloud.com/…/" }] }
+```
+
+The user id comes from a `requestIdentity` service (dsh-oidc provides one); without it, or for someone with no mapping, the panel refuses instead of showing a shared calendar. The password is read on the server and never sent to the browser. `tools: false` removes the model-facing tools and keeps the panel.

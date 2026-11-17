@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.19.0 (2026-11-17)
+
+- Add `tools: false` to turn the model-facing tools off and keep the panel.
+- Move the panel's settings and draft routes onto DSH's own request pipeline (`/api/dsh-calendar/settings`, `/api/dsh-calendar/draft`), so they work behind a reverse proxy; the loopback-only route is no longer mounted.
+- Add per-person connections: `people` / `peopleFile` (+ `peopleKey`) map a verified `requestIdentity` user id to a person, and `connectionsDir/<person>.json` holds that person's account, `passwordFile`, several calendars and `readOnly` (default true). Each person only sees their own; credentials stay on the server. Without a mapping the single shared connection works as before.
+- Events carry the name of the calendar they came from; a read-only connection refuses create, edit and drag in the panel and on the server.
+
 ## 0.18.2 (2026-11-18)
 
 - 更新区底部新增克制、无打扰的 GitHub 点赞与问题反馈快捷链接，并完善中英文检索关键词。

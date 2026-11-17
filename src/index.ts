@@ -12,11 +12,12 @@ import { registerUpdates } from '@stardustlc/dsh-updates'
 import { resolveConfig, type CalendarConfig } from './config.js'
 import { buildCalendarTools, type CalendarToolDefinition } from './tools.js'
 import { CalendarSettingsSchema, SETTINGS_NAMESPACE, toCalendarConfig, toSettingsBase, validateSettingsValue, type CalendarSettingsValue } from './settings.js'
-import { CalendarSettingsBackend, installCalendarSettingsWeb, CONNECTION_KEYS, hostFormsFaceOf, settingsFaceOf, type CalendarSettingsFace } from './web.js'
+import { CalendarSettingsBackend, installCalendarFetchRoutes, CONNECTION_KEYS, hostFormsFaceOf, settingsFaceOf, type CalendarSettingsFace } from './web.js'
 import { connectionFile, readConnectionFile, writeConnectionFile } from './store.js'
 import { Config as ConfigSchema, liveConfig } from './host-config.js'
 import { CalendarImportBackend, installCalendarImport } from './import-web.js'
 import { nativeDraftModel } from './quick-draft.js'
+import type { RequestIdentityLike } from './people.js'
 import { entryIdOf, installLegacySettingsImport, isFormsProvider, isLegacyProvider, settingsProviderOf } from './host-settings.js'
 
 /** 宿主用 entry 的 Config 生成设置表单：0.1.7 起这就是「注册设置项」的方式。 */
@@ -169,9 +170,17 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
   const configOf = (): CalendarConfig => ({ ...cfg, ...toCalendarConfig(attached.face.read() as Partial<CalendarSettingsValue> | undefined, null) })
 
   const disposers: Array<() => void> = []
-  for (const definition of buildCalendarTools(configOf)) {
-    disposers.push(ctx.tools.register(definition))
+  // `tools: false` keeps the panel and drops the model-facing tools (their schemas cost tokens on every step).
+  if (cfg.tools !== false) {
+    for (const definition of buildCalendarTools(configOf)) {
+      disposers.push(ctx.tools.register(definition))
+    }
   }
+  let identity: (() => RequestIdentityLike | undefined) | undefined
+  ctx.inject?.(['requestIdentity'], (service: any) => {
+    identity = () => service.requestIdentity
+    service.effect?.(() => () => { identity = undefined })
+  })
 
   // 面板路由挂上即用：settings 服务由 backend 在第一个请求上懒接入（见 web.ts 的
   // ensureSettings），所以这里不依赖任何子 fiber 的时序，也不会因为重复 apply 而失效。
@@ -195,10 +204,12 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
     settingsBase: toSettingsBase(cfg),
     settingsNs: attached.ns,
     draftModel: () => llm ? nativeDraftModel(llm, attachments) : undefined,
+    people: { people: cfg.people ?? {}, peopleFile: cfg.peopleFile ?? '', peopleKey: cfg.peopleKey ?? '', connectionsDir: cfg.connectionsDir ?? '' },
+    identity: () => identity?.(),
     ...(attached.reason !== undefined ? { settingsReason: attached.reason } : {}),
   })
   try {
-    installCalendarSettingsWeb(ctx, backend)
+    installCalendarFetchRoutes(ctx, backend)
     installCalendarImport(ctx, new CalendarImportBackend({ config: () => backend.currentConfig() }))
   } catch (error) {
     console.warn('dsh-calendar: 面板路由未挂载：' + (error instanceof Error ? error.message : String(error)))

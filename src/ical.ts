@@ -59,6 +59,8 @@ export interface CalendarEvent {
   url?: string
   created?: string
   lastModified?: string
+  /** Name of the connected calendar the event came from (set when several are connected). */
+  calendar?: string
 }
 
 /** 展开重复事件超出迭代预算：显式报错，避免把「没走到窗口」静默当成「窗口内没有实例」。 */

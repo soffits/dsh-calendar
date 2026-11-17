@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict';
-import { CalendarSettingsBackend, SETTINGS_ROUTE, hostVerdict, mergeConnection, postVerdict } from '../lib/web.js';
+import { CalendarSettingsBackend, SETTINGS_API_ROUTE, SETTINGS_ROUTE, hostVerdict, mergeConnection, postVerdict } from '../lib/web.js';
 import { toCalendarConfig, toSettingsBase, validateSettingsValue } from '../lib/settings.js';
 import { attachSettings } from '../lib/index.js';
 import { readConnectionFile, writeConnectionFile } from '../lib/store.js';
@@ -217,9 +217,9 @@ test('参数不合法时给出可读的中文错误，且不去打扰 CalDAV 服
 });
 
 test('路由常量与面板一致（改一处忘另一处会被这条抓住）', async () => {
-  assert.equal(SETTINGS_ROUTE, '/_dsh/dsh-calendar/settings');
+  assert.equal(SETTINGS_API_ROUTE, '/api/dsh-calendar/settings');
   const source = await import('node:fs').then((fs) => fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8'));
-  assert.match(source, /"_dsh\/dsh-calendar\/settings"/, '面板通过文档 base URI 访问同一路由，兼容反向代理子路径');
+  assert.match(source, /"api\/dsh-calendar\/settings"/, '面板通过文档 base URI 访问同一路由，兼容反向代理子路径');
 });
 
 test('面板挂在宿主的 settings 槽位，并自带一个对话页悬浮按钮', async () => {
