@@ -84,7 +84,7 @@ async function mountEnv({ withHostModal = false, darkHost = false } = {}) {
 }
 
 test('DSH >=0.2.2-rc.3 manifest, window clearances, drag exclusion, and dsh-updates footer are intact', async () => {
-  assert.equal(PKG.engines?.dsh, '>=0.2.2-rc.3');
+  assert.equal(PKG.engines?.dsh, '>=0.2.2-rc.1');
   assert.deepEqual(PKG.dsh?.client?.inject, [
     '@deepseek-ai/dsh-client-ui-settings',
     '@deepseek-ai/dsh-client-ui-layout',

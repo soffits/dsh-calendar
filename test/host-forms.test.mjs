@@ -50,7 +50,6 @@ function formsCtx(provider, options = {}) {
     settings: provider,
     appReady: { onReady: (fn) => { fn(); return () => {}; } },
     // 面板路由要挂到宿主 webserver 上；这里给个只记录的最小替身。
-    connection: { fetch: { register: (route) => { routes.push(route); return () => {}; } } },
     effect: (fn) => { fn(); return () => {}; },
     fiber,
   };
@@ -58,6 +57,7 @@ function formsCtx(provider, options = {}) {
     registered,
     routes,
     fiber,
+    connection: { fetch: { register: (route) => { routes.push(route); return () => {}; } } },
     get: (name) => (name === 'settings' ? provider : undefined),
     tools: { register(definition) { registered.push(definition); return () => {}; } },
     on: () => () => {},

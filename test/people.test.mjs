@@ -109,8 +109,8 @@ test('tools: false registers no model tools and keeps the panel routes', (t) => 
   t.after(() => { if (previous === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previous })
   const count = (config) => {
     const registered = [], routes = []
-    const child = { appReady: { onReady: (fn) => { fn(); return () => {} } }, connection: { fetch: { register: (route) => { routes.push(route.path); return () => {} } } }, effect: (fn) => { fn(); return () => {} } }
-    const ctx = { tools: { register(def) { registered.push(def.name); return () => {} } }, on: () => () => {}, effect: (fn) => { fn(); return () => {} }, inject: (_services, callback) => callback(child) }
+    const child = { appReady: { onReady: (fn) => { fn(); return () => {} } }, effect: (fn) => { fn(); return () => {} } }
+    const ctx = { connection: { fetch: { register: (route) => { routes.push(route.path); return () => {} } } }, tools: { register(def) { registered.push(def.name); return () => {} } }, on: () => () => {}, effect: (fn) => { fn(); return () => {} }, inject: (_services, callback) => callback(child) }
     const warn = console.warn
     console.warn = () => {}
     try { apply(ctx, config) } finally { console.warn = warn }

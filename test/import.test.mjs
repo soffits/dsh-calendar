@@ -89,7 +89,7 @@ test('cancellation before commit and concurrent imports do not issue extra write
 })
 test('import uses only authenticated carrier registration; cross-origin and null-origin requests fail', async () => {
   const f = fixture(), routes = []
-  installCalendarImport({ inject(names, cb) { assert.deepEqual(names, ['connection']); cb({ connection: { fetch: { register: r => routes.push(r) } } }) } }, f.backend)
+  installCalendarImport({ connection: { fetch: { register: r => routes.push(r) } } }, f.backend)
   assert.equal(routes[0].path, CALENDAR_IMPORT_ROUTE); assert.equal(routes[0].requestBody, 'buffered')
   const request = headers => new Request('http://dsh.internal' + CALENDAR_IMPORT_ROUTE, { method: 'POST', headers: { 'content-type': 'application/json', 'x-dsh-calendar-import': '1', host: '127.0.0.1:8181', ...headers }, body: JSON.stringify({ action: 'zones' }) })
   assert.equal((await f.backend.fetch(request({ origin: 'http://127.0.0.1:8181' }))).status, 200)

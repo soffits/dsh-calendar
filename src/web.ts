@@ -670,10 +670,8 @@ export function installCalendarSettingsWeb(ctx: any, backend: CalendarSettingsBa
  * who asks, so they work behind a reverse proxy and can tell people apart.
  */
 export function installCalendarFetchRoutes(ctx: any, backend: CalendarSettingsBackend): void {
-  ctx.inject?.(['connection'], (host: any) => {
-    const register = host.connection?.fetch?.register
-    if (typeof register !== 'function') return
-    register.call(host.connection.fetch, { path: SETTINGS_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
-    register.call(host.connection.fetch, { path: DRAFT_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request, true) })
-  })
+  const fetchRoutes = ctx.connection?.fetch
+  if (typeof fetchRoutes?.register !== 'function') return
+  fetchRoutes.register({ path: SETTINGS_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
+  fetchRoutes.register({ path: DRAFT_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request, true) })
 }

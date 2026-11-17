@@ -5,6 +5,7 @@
 - Add `tools: false` to turn the model-facing tools off and keep the panel.
 - Move the panel's settings and draft routes onto DSH's own request pipeline (`/api/dsh-calendar/settings`, `/api/dsh-calendar/draft`), so they work behind a reverse proxy; the loopback-only route is no longer mounted.
 - Add per-person connections: `people` / `peopleFile` (+ `peopleKey`) map a verified `requestIdentity` user id to a person, and `connectionsDir/<person>.json` holds that person's account, `passwordFile`, several calendars and `readOnly` (default true). Each person only sees their own; credentials stay on the server. Without a mapping the single shared connection works as before.
+- Lower the `dsh` engine requirement to `>=0.2.2-rc.1` (the panel and tools run on it), and register the routes from the plugin's own `connection` injection.
 - Events carry the name of the calendar they came from; a read-only connection refuses create, edit and drag in the panel and on the server.
 
 ## 0.18.2 (2026-11-18)

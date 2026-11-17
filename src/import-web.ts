@@ -108,5 +108,5 @@ export class CalendarImportBackend {
   }
 }
 export function installCalendarImport(ctx: any, backend: CalendarImportBackend): void {
-  ctx.inject?.(['connection'], (host: any) => host.connection?.fetch?.register({ path: CALENDAR_IMPORT_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) }))
+  ctx.connection?.fetch?.register?.({ path: CALENDAR_IMPORT_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
 }

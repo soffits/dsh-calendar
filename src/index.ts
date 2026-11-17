@@ -26,7 +26,7 @@ export type Config = CalendarConfig
 
 /** cordis 服务注入：apply 里要用 ctx.tools，必须显式声明注入，否则宿主会抛 cannot get property without inject。 */
 export const name = 'calendar'
-export const inject = ['tools', 'settings']
+export const inject = ['tools', 'settings', 'connection']
 
 /** 组合包补丁里那一行的 id；拿不到 fiber 时用它兜底。 */
 const ENTRY_ID = 'calendar'
@@ -176,11 +176,8 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
       disposers.push(ctx.tools.register(definition))
     }
   }
-  let identity: (() => RequestIdentityLike | undefined) | undefined
-  ctx.inject?.(['requestIdentity'], (service: any) => {
-    identity = () => service.requestIdentity
-    service.effect?.(() => () => { identity = undefined })
-  })
+  const identity = (): RequestIdentityLike | undefined => ctx.get?.('requestIdentity')
+
 
   // 面板路由挂上即用：settings 服务由 backend 在第一个请求上懒接入（见 web.ts 的
   // ensureSettings），所以这里不依赖任何子 fiber 的时序，也不会因为重复 apply 而失效。
@@ -205,7 +202,7 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
     settingsNs: attached.ns,
     draftModel: () => llm ? nativeDraftModel(llm, attachments) : undefined,
     people: { people: cfg.people ?? {}, peopleFile: cfg.peopleFile ?? '', peopleKey: cfg.peopleKey ?? '', connectionsDir: cfg.connectionsDir ?? '' },
-    identity: () => identity?.(),
+    identity,
     ...(attached.reason !== undefined ? { settingsReason: attached.reason } : {}),
   })
   try {
