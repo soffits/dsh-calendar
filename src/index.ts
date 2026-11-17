@@ -201,7 +201,13 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
     settingsBase: toSettingsBase(cfg),
     settingsNs: attached.ns,
     draftModel: () => llm ? nativeDraftModel(llm, attachments) : undefined,
-    people: { people: cfg.people ?? {}, peopleFile: cfg.peopleFile ?? '', peopleKey: cfg.peopleKey ?? '', connectionsDir: cfg.connectionsDir ?? '' },
+    // Read at each request: the fields are live, so an edit applies without a reload.
+    people: {
+      get people() { return cfg.people ?? {} },
+      get peopleFile() { return cfg.peopleFile ?? '' },
+      get peopleKey() { return cfg.peopleKey ?? '' },
+      get connectionsDir() { return cfg.connectionsDir ?? '' },
+    },
     identity,
     ...(attached.reason !== undefined ? { settingsReason: attached.reason } : {}),
   })
