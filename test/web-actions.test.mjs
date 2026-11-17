@@ -630,5 +630,5 @@ test('面板体验三件套：记住视图 / 周视图从 07:00 起 / 窄容器�
   assert.match(source, /h\("div", \{ className: "dshc-week", ref: scroller \}/, '滚动容器挂了 ref');
   // ③ 窄容器
   assert.match(source, /container-type:inline-size/, '面板自身是容器查询的容器');
-  assert.match(source, /@container \(max-width: 620px\)\{\.dshc-title\{display:none\}\.dshc-chip \.t\{display:none\}/, '窄容器里藏掉时间前缀与重复标题');
+  assert.match(source, /@container \(max-width: 620px\)\{\.dsh-calendar_miniCalendar\{display:none\}\.dshc-title\{display:none\}\.dshc-chip \.t\{display:none\}/, '窄容器里藏掉时间前缀与重复标题');
 });

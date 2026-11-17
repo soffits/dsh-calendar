@@ -11,8 +11,9 @@
 .dshc-root[data-main="true"] {
   height: 100%;
   padding-block-start: var(--dsh-frame-top-clearance, 0px);
-  padding-inline-start: var(--dsh-frame-leading-clearance, 0px);
 }
+/* The host's window controls only overlap the first row, so only that row keeps clear of them. */
+.dshc-root[data-main="true"] > .dshc-shell > .topbar { padding-inline-start: calc(14px + var(--dsh-frame-leading-clearance, 0px)); }
 
 .dshc-root *, .dialog *, .dshc-float, .dshc-fab { box-sizing: border-box; }
 .dshc-root:focus-visible, .dshc-root :focus-visible, .dialog :focus-visible, .dshc-fab:focus-visible {
@@ -804,6 +805,8 @@ textarea.dshc-input { min-height: 64px; resize: vertical; }
 }
 
 @container (max-width: 620px) {
+  /* The grid and the agenda already navigate by month: the mini calendar would push them a screen down. */
+  .miniCalendar { display: none; }
   .dshc-title { display: none; }
   .dshc-chip :global(.t) { display: none; }
   .dshc-toolbar { gap: 6px; }

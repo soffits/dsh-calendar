@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.19.2 (2026-11-17)
+
+- Phones: the host's leading window clearance now only indents the first row instead of the whole panel, so the grid and agenda use the full width; the mini calendar is hidden under 620 px (the month grid and agenda already navigate).
+
 ## 0.19.1 (2026-11-17)
 
 - Agenda: an all-day event no longer jumps ahead of earlier days.
