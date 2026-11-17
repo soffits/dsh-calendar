@@ -551,7 +551,11 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
         }
         /** 事件排序：全天在前，然后按开始时间。 */
         function sortForDisplay(events) {
+            // Day first, then all-day before timed, then start time: an all-day event only leads its own day.
             return events.slice().sort((a, b) => {
+                const day = startOfDay(startDate(a)) - startOfDay(startDate(b));
+                if (day !== 0)
+                    return day;
                 if (a.allDay !== b.allDay)
                     return a.allDay ? -1 : 1;
                 return startDate(a) - startDate(b);
@@ -1814,6 +1818,8 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const [view, setView] = useState(loadStoredView);
             const [anchor, setAnchor] = useState(() => new Date());
             const [showCalendar, setShowCalendar] = useState(true);
+            const [hiddenCalendars, setHiddenCalendars] = useState(() => new Set());
+            const toggleCalendar = name => setHiddenCalendars(previous => { const next = new Set(previous); if (next.has(name)) next.delete(name); else next.add(name); return next; });
             const [demo, setDemo] = useState(false);
             const [reloadToken, setReloadToken] = useState(0);
             const [selected, setSelected] = useState(null);
@@ -1924,7 +1930,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 const override = overrides[event.uid];
                 return override === undefined ? event : Object.assign({}, event, override);
             }), [data.events, overrides]);
-            const visibleEvents = showCalendar || demo ? eventsWithMoves : NO_EVENTS;
+            const visibleEvents = demo ? eventsWithMoves : showCalendar ? eventsWithMoves.filter(event => !event.calendar || !hiddenCalendars.has(event.calendar)) : NO_EVENTS;
             const { count: conflicts, conflicted, overlap } = useMemo(() => conflictSummary(visibleEvents), [visibleEvents]);
             const source = conn?.configured ? conn.calendar || connectionSummary(conn) : null;
             /**
@@ -2218,13 +2224,15 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const selectPalette = value => { setPalette(value); storeCalendarPreference(CALENDAR_PALETTE_KEY, value); };
             const reviewConflicts = () => setUtility("conflicts");
             const readOnly = conn?.readOnly === true;
+            // A per-person connection is kept on the server: there is nothing to edit in the panel.
+            const canConnect = conn?.person === undefined;
             const canCreate = !demo && configured !== null && !toolBusy && !readOnly;
             const commandActions = workbench ? [
-                { id: "create", key: "n", label: t("action.new"), run: startDraft, disabled: !canCreate },
+                ...(readOnly ? [] : [{ id: "create", key: "n", label: t("action.new"), run: startDraft, disabled: !canCreate }]),
                 { id: "availability", key: "f", label: availabilityLabel, run: showAvailability, disabled: demo || configured === null },
                 { id: "conflicts", label: calendarText("查看日程冲突", "Review scheduling conflicts"), run: reviewConflicts, disabled: conflicts === 0 },
-                { id: "import", label: t("import.open"), run: () => setTool("import"), disabled: demo || readOnly },
-                { id: "connection", label: t("conn.title"), run: () => setTool("connection"), disabled: configured === null },
+                ...(readOnly ? [] : [{ id: "import", label: t("import.open"), run: () => setTool("import"), disabled: demo }]),
+                ...(canConnect ? [{ id: "connection", label: t("conn.title"), run: () => setTool("connection"), disabled: configured === null }] : []),
                 ...VIEWS.map(name => ({
                     id: name, key: name[0],
                     label: calendarText("切换到" + t("view." + name) + "视图", "Switch to " + t("view." + name)),
@@ -2263,12 +2271,11 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 tool === "schedule" ? period : null,
                 tool === "schedule" ? views : null,
                 h("span", { className: styles["dshc-spacer"] }),
-                h(StyleSwitcher, { style: dshStyle, onChange: setDshStyle, lang: UI_LANG, compact: true }),
-                h(Btn, { disabled: configured === null || toolBusy, onClick: () => setConnOpen(true) }, t("conn.button")),
-                h(Btn, { disabled: demo || toolBusy || readOnly, onClick: () => importOpen ? backToSchedule() : setTool("import") }, t("import.open")),
+                canConnect ? h(Btn, { disabled: configured === null || toolBusy, onClick: () => setConnOpen(true) }, t("conn.button")) : null,
+                readOnly ? null : h(Btn, { disabled: demo || toolBusy, onClick: () => importOpen ? backToSchedule() : setTool("import") }, t("import.open")),
                 h(Btn, { disabled: demo || configured !== true || toolBusy, onClick: () => availabilityOpen ? backToSchedule() : showAvailability() }, availabilityLabel),
                 refresh,
-                h(Btn, { variant: "primary", disabled: demo || toolBusy || readOnly, onClick: () => createAt(anchor) }, t("action.new"))
+                readOnly ? null : h(Btn, { variant: "primary", disabled: demo || toolBusy, onClick: () => createAt(anchor) }, t("action.new"))
             ) : null;
             const topbar = !compact ? h("header", { className: styles.topbar },
                 h("div", { className: styles.brand },
@@ -2280,8 +2287,8 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     items: [
                         { value: "schedule", label: calendarText("日程", "Schedule") },
                         { value: "availability", label: availabilityLabel, disabled: demo || configured === null },
-                        { value: "import", label: t("import.open"), disabled: demo || readOnly },
-                        { value: "connection", label: calendarText("日历连接", "CalDAV"), disabled: configured === null }
+                        ...(readOnly ? [] : [{ value: "import", label: t("import.open"), disabled: demo }]),
+                        ...(canConnect ? [{ value: "connection", label: calendarText("日历连接", "CalDAV"), disabled: configured === null }] : [])
                     ],
                     onChange: next => next === "availability" ? showAvailability() : setTool(next)
                 }),
@@ -2292,10 +2299,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                         "aria-label": quickLabel, title: quickLabel + " (" + quickKey + ")",
                         onClick: () => setUtility("commands"), "aria-keyshortcuts": "Control+Shift+K Meta+Shift+K"
                     }, h("kbd", { className: styles.triggerKey }, quickKey)) : null,
-                    h(Btn, { variant: "primary", icon: "plus", disabled: !canCreate, onClick: startDraft }, t("action.new")),
-                    h(StyleSwitcher, { style: dshStyle, onChange: setDshStyle, lang: UI_LANG, compact: true }),
-                    workbench ? h(CalendarLayoutPicker, { layout, options: layoutOptions, onChange: selectLayout }) : null,
-                    workbench ? h(CalendarPalettePicker, { palette, dark, onChange: selectPalette }) : null
+                    readOnly ? null : h(Btn, { variant: "primary", icon: "plus", disabled: !canCreate, onClick: startDraft }, t("action.new"))
                 )
             ) : null;
 
@@ -2332,6 +2336,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 rail: compact ? null : h(ScheduleRail, {
                     id: viewId + "-sidebar",
                     anchor, onPick: setAnchor, source, showing: showCalendar, onVisibilityChange: setShowCalendar,
+                    calendars: Array.isArray(conn?.calendars) && conn.calendars.length > 0 ? conn.calendars : null, hiddenCalendars, onToggleCalendar: toggleCalendar,
                     conflicts, overlap, workbench, loading: configured === null,
                     onReviewConflicts: workbench ? reviewConflicts : undefined
                 })
@@ -2354,7 +2359,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     h("footer", { className: styles["dshc-footer"] },
                         h("span", null, t("count.events", { n: visibleEvents.length }) +
                             (visibleEvents.some(event => event.isOccurrence) ? " · " + t("count.occurrences", { n: visibleEvents.filter(event => event.isOccurrence).length }) : "")),
-                        workbench ? h(CalendarShortcutHints, { quickKey }) : null,
+                        workbench ? h(CalendarShortcutHints, { quickKey, canCreate: !readOnly }) : null,
                         compact && source ? h("span", null, t("conn.current", { summary: source })) : null
                     )
                 )

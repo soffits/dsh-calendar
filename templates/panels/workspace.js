@@ -47,10 +47,10 @@ function CalendarLayoutPicker({ layout, options, onChange }) {
     );
 }
 
-function CalendarShortcutHints({ quickKey }) {
+function CalendarShortcutHints({ quickKey, canCreate = true }) {
     const hints = [
         ["W / M / A", calendarText("周 / 月 / 议程", "Week / Month / Agenda")],
-        ["N", t("action.new")],
+        ...(canCreate ? [["N", t("action.new")]] : []),
         ["F", calendarText("找空闲时段", "Find available time")],
         [quickKey, calendarText("快捷操作", "Quick actions")]
     ];

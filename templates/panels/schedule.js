@@ -77,7 +77,7 @@ function MiniCalendar({ anchor, onPick }) {
     );
 }
 
-function ScheduleRail({ id, anchor, onPick, source, showing, onVisibilityChange, conflicts, overlap, workbench, loading, onReviewConflicts }) {
+function ScheduleRail({ id, anchor, onPick, source, showing, onVisibilityChange, calendars, hiddenCalendars, onToggleCalendar, conflicts, overlap, workbench, loading, onReviewConflicts }) {
     const hasConflicts = conflicts > 0;
     const conflictText = hasConflicts
         ? calendarText(conflicts + " 处时间重叠", conflicts === 1 ? "1 scheduling overlap" : conflicts + " scheduling overlaps")
@@ -86,8 +86,10 @@ function ScheduleRail({ id, anchor, onPick, source, showing, onVisibilityChange,
         h("div", { className: styles.railScroll },
             h(MiniCalendar, { anchor, onPick }),
             h("section", { className: styles.railSection },
-                h("h2", null, calendarText("已连接日历", "Connected calendar")),
-                h("div", { className: styles.calendarSource }, source
+                h("h2", null, calendars ? calendarText("日历", "Calendars") : calendarText("已连接日历", "Connected calendar")),
+                h("div", { className: styles.calendarSource }, source && calendars
+                    ? calendars.map(name => h(Chk, { key: name, checked: showing && !hiddenCalendars.has(name), label: name, title: name, onChange: () => onToggleCalendar(name) }))
+                    : source
                     ? h(Chk, { checked: showing, label: source, title: source, onChange: onVisibilityChange })
                     : h("p", { className: styles["dshc-sub"] }, loading ? t("state.loading") : calendarText("尚未连接日历", "No calendar connected"))),
                 source && showing ? h("div", { className: clsx(styles.conflictCard, hasConflicts && styles.warn) },

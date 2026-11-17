@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.19.1 (2026-11-17)
+
+- Agenda: an all-day event no longer jumps ahead of earlier days.
+- Phones: the sidebar stacks (mini calendar, then the calendars) under 620 px, long names wrap instead of clipping, agenda rows no longer scroll sideways, touch targets are 40 px, and keyboard hints are hidden on touch.
+- The sidebar lists each connected calendar with its own show/hide checkbox.
+- UI chrome is not text-selectable; fields and dialogs still are.
+- Read-only connections hide New event, Import ICS and the N hint instead of disabling them; a per-person connection also hides the CalDAV tab.
+- Remove the header style, layout and palette pickers: the panel follows DSH's own theme.
+
 ## 0.19.0 (2026-11-17)
 
 - Add `tools: false` to turn the model-facing tools off and keep the panel.

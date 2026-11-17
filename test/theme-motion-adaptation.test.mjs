@@ -117,70 +117,6 @@ test('never-too-dark: pitch-black surfaces are eliminated and host dark mode use
   }
 });
 
-test('5-style theme switcher syncs workbench, harmonizes layout/palette, and updates portaled Modal dialogs', async () => {
-  const { win, react, probe, render } = await mountEnv({ withHostModal: true });
-  const { container, unmount } = await render(react.createElement(probe.CalendarPanel, { workbench: true }));
-  try {
-    assert.deepEqual(
-      Array.from(probe.DSH_STYLES, item => item.id),
-      ['harness', 'cream', 'claude', 'pixel8bit', 'mint'],
-    );
-    const rootSection = container.querySelector('.dshc-root');
-    assert.equal(rootSection.getAttribute('data-dsh-style'), 'harness');
-
-    // Open StyleSwitcher menu and pick pixel8bit
-    const switcherTrigger = container.querySelector('.dsh-style-trigger');
-    assert.ok(switcherTrigger, 'StyleSwitcher trigger must render in topbar');
-    await react.act(async () => {
-      switcherTrigger.click();
-    });
-    const pixelOption = [...container.querySelectorAll('[role="menuitemradio"]')].find(el => el.textContent.includes('8-Bit'));
-    assert.ok(pixelOption, '8-Bit preset option must appear in menu');
-    await react.act(async () => {
-      pixelOption.click();
-    });
-
-    assert.equal(win.localStorage.getItem('dsh-stardust:ui-style'), 'pixel8bit');
-    assert.equal(rootSection.getAttribute('data-dsh-style'), 'pixel8bit');
-    // Custom style defers surface tokens to CSS instead of inline overriding --dsw-alias-bg-base
-    assert.equal(rootSection.style.getPropertyValue('--dsw-alias-bg-base'), '');
-
-    // Picking a custom calendar palette swatch ("极光紫") harmonizes accent without clobbering bg-base
-    const auroraSwatch = container.querySelector('button[aria-label="极光紫"]');
-    assert.ok(auroraSwatch);
-    await react.act(async () => {
-      auroraSwatch.click();
-    });
-    assert.equal(rootSection.style.getPropertyValue('--dsw-alias-accent'), '#7c3aed');
-    assert.equal(rootSection.style.getPropertyValue('--dsw-alias-bg-base'), '');
-
-    // Open New Event dialog (portaled to document.body via HostModal) and verify portal sync + drag exclusion
-    let newBtn = null;
-    for (let i = 0; i < 30 && !newBtn; i++) {
-      newBtn = [...container.querySelectorAll('button')].find(b => b.textContent.trim() === '新建日程' && !b.disabled);
-      if (!newBtn) await react.act(async () => new Promise(r => setTimeout(r, 10)));
-    }
-    assert.ok(newBtn, 'New event button must become enabled');
-    await react.act(async () => {
-      newBtn.click();
-    });
-
-    const portalDialog = win.document.body.querySelector('.host-portal-modal[role="dialog"]');
-    assert.ok(portalDialog, 'Modal must portal to document.body');
-    assert.equal(portalDialog.getAttribute('data-dsh-style'), 'pixel8bit');
-    assert.equal(portalDialog.hasAttribute('data-window-drag-exclude'), true);
-
-    // Cross-plugin broadcast via writeDshStyle updates both workbench root and open portaled dialog live
-    await react.act(async () => {
-      probe.writeDshStyle('claude', win);
-    });
-    assert.equal(rootSection.getAttribute('data-dsh-style'), 'claude');
-    assert.equal(portalDialog.getAttribute('data-dsh-style'), 'claude');
-  } finally {
-    await unmount();
-  }
-});
-
 test('floating Launcher and SVG micro-animation icons expose data-window-drag-exclude, data-dsh-icon, and reduced-motion rules', async () => {
   const { win, react, probe, render } = await mountEnv();
   await react.act(async () => {
@@ -202,7 +138,7 @@ test('floating Launcher and SVG micro-animation icons expose data-window-drag-ex
     assert.equal(floatPanel.hasAttribute('data-window-drag-exclude'), true);
 
     const icons = [...container.querySelectorAll('svg[data-dsh-icon]')].map(el => el.getAttribute('data-dsh-icon'));
-    for (const expected of ['calendar', 'refresh', 'down']) {
+    for (const expected of ['calendar', 'refresh']) {
       assert.ok(icons.includes(expected), `expected SVG icon with data-dsh-icon="${expected}", got ${icons.join(',')}`);
     }
 
