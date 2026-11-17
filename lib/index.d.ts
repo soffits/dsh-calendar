@@ -47,10 +47,8 @@ export interface CalendarPluginContext {
  * 在请求处理里注册会失败，而失败一旦被吞掉，就会在保存时才暴露成「namespace is not registered」。
  * 拿不到服务 / 注册失败都只 warn：面板退化为只读，配置仍可写在 cordis.patch.yml。
  */
-/** 兜底：把连接配置存进插件自己的文件（宿主 settings 不可用/注册失败时）。 */
-export declare function fileSettingsFace(file?: string): CalendarSettingsFace;
 /**
- * 接上配置存储：0.1.7 的宿主表单 → 老宿主的 settings 命名空间 → 插件自己的兜底文件。
+ * 接上配置存储：0.1.7 的宿主表单 → 老宿主的 settings 命名空间 → 没有读写面（面板只读）。
  *
  * 三代宿主三条路，每一条失败都往下退而不是抛：
  *   1. **0.1.7 起**：设置项就是 entry 的 Config（`.volatile()` 字段），宿主自己投影成表单，
@@ -64,7 +62,7 @@ export declare function fileSettingsFace(file?: string): CalendarSettingsFace;
  * @returns 读写面、它在 describe() 里的 ns，以及退化原因（没退化就没有）。
  */
 export declare function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig): {
-    face: CalendarSettingsFace;
+    face: CalendarSettingsFace | undefined;
     reason?: string;
     ns: string;
 };
@@ -81,7 +79,6 @@ export * from './caldav.js';
 export * from './tools.js';
 export * from './web.js';
 export * from './settings.js';
-export * from './store.js';
 export * from './host-settings.js';
 export * from './import-ical.js';
 export * from './import-web.js';

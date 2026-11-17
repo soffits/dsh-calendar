@@ -13,7 +13,6 @@ import { resolveConfig, type CalendarConfig } from './config.js'
 import { buildCalendarTools, type CalendarToolDefinition } from './tools.js'
 import { CalendarSettingsSchema, SETTINGS_NAMESPACE, toCalendarConfig, toSettingsBase, validateSettingsValue, type CalendarSettingsValue } from './settings.js'
 import { CalendarSettingsBackend, installCalendarFetchRoutes, CONNECTION_KEYS, hostFormsFaceOf, settingsFaceOf, type CalendarSettingsFace } from './web.js'
-import { connectionFile, readConnectionFile, writeConnectionFile } from './store.js'
 import { Config as ConfigSchema, liveConfig } from './host-config.js'
 import { CalendarImportBackend, installCalendarImport } from './import-web.js'
 import { nativeDraftModel } from './quick-draft.js'
@@ -58,21 +57,8 @@ export interface CalendarPluginContext {
  * 在请求处理里注册会失败，而失败一旦被吞掉，就会在保存时才暴露成「namespace is not registered」。
  * 拿不到服务 / 注册失败都只 warn：面板退化为只读，配置仍可写在 cordis.patch.yml。
  */
-/** 兜底：把连接配置存进插件自己的文件（宿主 settings 不可用/注册失败时）。 */
-export function fileSettingsFace(file: string = connectionFile()): CalendarSettingsFace {
-  return {
-    kind: 'file',
-    read: () => readConnectionFile(file).value,
-    descriptor: () => ({ revision: readConnectionFile(file).revision }),
-    replace: async (value: Record<string, unknown>): Promise<void> => {
-      const current = readConnectionFile(file)
-      writeConnectionFile({ revision: current.revision + 1, value }, file)
-    },
-  }
-}
-
 /**
- * 接上配置存储：0.1.7 的宿主表单 → 老宿主的 settings 命名空间 → 插件自己的兜底文件。
+ * 接上配置存储：0.1.7 的宿主表单 → 老宿主的 settings 命名空间 → 没有读写面（面板只读）。
  *
  * 三代宿主三条路，每一条失败都往下退而不是抛：
  *   1. **0.1.7 起**：设置项就是 entry 的 Config（`.volatile()` 字段），宿主自己投影成表单，
@@ -85,7 +71,7 @@ export function fileSettingsFace(file: string = connectionFile()): CalendarSetti
  * 返回 reason 是为了让面板说清「为什么不是宿主设置」，而不是笼统一句「不可用」。
  * @returns 读写面、它在 describe() 里的 ns，以及退化原因（没退化就没有）。
  */
-export function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig): { face: CalendarSettingsFace; reason?: string; ns: string } {
+export function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig): { face: CalendarSettingsFace | undefined; reason?: string; ns: string } {
   const provider = settingsProviderOf(ctx)
   if (isFormsProvider(provider)) {
     const entryId = entryIdOf(ctx, ENTRY_ID)
@@ -105,8 +91,8 @@ export function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig):
   const usable = isLegacyProvider(provider)
   if (usable !== true) {
     const reason = provider === undefined ? '插件未注入宿主 settings 服务' : '宿主 settings 服务既不能注册也不提供表单'
-    console.warn('dsh-calendar: ' + reason + '，连接配置改存插件自己的文件：' + connectionFile())
-    return { face: fileSettingsFace(), reason, ns: SETTINGS_NAMESPACE }
+    console.warn('dsh-calendar: ' + reason + '，面板只读，连接配置写在 cordis.patch.yml')
+    return { face: undefined, reason, ns: SETTINGS_NAMESPACE }
   }
   let scope: any
   let failure: string | undefined
@@ -128,8 +114,8 @@ export function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig):
   if (failure !== undefined) {
     // 注册失败且没人注册过：写进去也会报 namespace is not registered，直接换兜底文件。
     const reason = 'settings 命名空间注册失败：' + failure
-    console.warn('dsh-calendar: ' + reason + '，连接配置改存插件自己的文件：' + connectionFile())
-    return { face: fileSettingsFace(), reason, ns: SETTINGS_NAMESPACE }
+    console.warn('dsh-calendar: ' + reason + '，面板只读，连接配置写在 cordis.patch.yml')
+    return { face: undefined, reason, ns: SETTINGS_NAMESPACE }
   }
   return { face: settingsFaceOf(provider, scope), ns: SETTINGS_NAMESPACE }
 }
@@ -167,7 +153,7 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
   // 面板把连接配置写进 settings 之后，工具的下一次调用就该用新配置 —— 所以工具与面板
   // 拿到的是一个 getter，而不是启动时那一份静态对象。
   const attached = attachSettings(ctx, cfg)
-  const configOf = (): CalendarConfig => ({ ...cfg, ...toCalendarConfig(attached.face.read() as Partial<CalendarSettingsValue> | undefined, null) })
+  const configOf = (): CalendarConfig => ({ ...cfg, ...toCalendarConfig(attached.face?.read() as Partial<CalendarSettingsValue> | undefined, null) })
 
   const disposers: Array<() => void> = []
   // `tools: false` keeps the panel and drops the model-facing tools (their schemas cost tokens on every step).
@@ -242,7 +228,6 @@ export * from './caldav.js'
 export * from './tools.js'
 export * from './web.js'
 export * from './settings.js'
-export * from './store.js'
 export * from './host-settings.js'
 export * from './import-ical.js'
 export * from './import-web.js'
