@@ -707,7 +707,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
         }
         /** 月视图：6×7 网格；每格最多 3 条，多的收成「+N」。 */
         function MonthView(props) {
-            const { anchor, events, onPick, onCreateAt, conflicted } = props;
+            const { anchor, events, onPick, onCreateAt, conflicted, canCreate = true } = props;
             const days = monthGridDays(anchor);
             const today = dayKey(new Date());
             const byDay = {};
@@ -733,14 +733,14 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                     tabIndex: 0,
                     className: clsx(styles["dshc-cell"], day.getMonth() !== anchor.getMonth() && styles.out, key === today && "today"),
                     // 读屏只会念出格子里的日期数字，不说这一格是干什么的；补上「哪天 + 新建」的完整名字。
-                    "aria-label": formatDay(day, { withYear: true }) + " · " + t("action.new"),
+                    "aria-label": formatDay(day, { withYear: true }) + (canCreate ? " · " + t("action.new") : ""),
                     "aria-current": key === today ? "date" : undefined,
-                    onClick: () => onCreateAt(day),
-                    onKeyDown: (e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                    onClick: canCreate ? () => onCreateAt(day) : undefined,
+                    onKeyDown: (e) => { if (canCreate && e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
                         e.preventDefault();
                         onCreateAt(day);
                     } },
-                    title: t("action.new")
+                    title: canCreate ? t("action.new") : undefined
                 },
                     h("div", { className: styles["dshc-daynum"] }, h("b", null, day.getDate())),
                     shown.map((event) => h(Chip, { key: eventKey(event), event, onClick: onPick, conflicted: conflicted?.has(event) })),
@@ -767,7 +767,8 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
          *      按渲染闭包挂/摘会出现「摘不掉 → 卸载后 pointerup 替用户提交一次改期」。
          */
         function WeekView(props) {
-            const { anchor, events, onPick, onCreateAt, onReschedule, conflicted } = props;
+            const { anchor, events, onPick, onCreateAt: createFromSlot, onReschedule, conflicted, canCreate = true } = props;
+            const onCreateAt = canCreate ? createFromSlot : () => { };
             /** 示例模式下没有 onReschedule：不做改期，也不显示拖拽提示。 */
             const canEdit = typeof onReschedule === "function";
             const HOUR_PX = 44;
@@ -1091,7 +1092,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
         }
         /** 议程视图：从今天起按天分组，最像「接下来要干什么」。 */
         function AgendaView(props) {
-            const { events, onPick, onCreateAt, conflicted } = props;
+            const { events, onPick, onCreateAt, conflicted, canCreate = true } = props;
             const groups = [];
             const index = {};
             for (const event of sortForDisplay(events)) {
@@ -1104,13 +1105,13 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 groups[index[key]].items.push(event);
             }
             if (groups.length === 0)
-                return h(EmptyState, { title: t("state.empty"), action: h(Btn, { icon: "plus", variant: "primary", onClick: () => onCreateAt(new Date()) }, t("action.new")) });
+                return h(EmptyState, canCreate ? { title: t("state.empty"), action: h(Btn, { icon: "plus", variant: "primary", onClick: () => onCreateAt(new Date()) }, t("action.new")) } : { title: t("state.empty") });
             return h("div", { className: styles["dshc-agenda"] }, groups.map((group) => h("div", { className: styles["dshc-daygroup"], key: group.key },
                 h("div", { className: styles["dshc-daylabel"] },
                     h("b", null, formatDay(group.day)),
                     h("span", { className: styles["dshc-sub"] }, relativeDay(group.day)),
                     h("span", { className: styles["dshc-spacer"] }),
-                    h(Btn, { variant: "ghost", onClick: () => onCreateAt(group.day) }, t("action.new"))
+                    canCreate ? h(Btn, { variant: "ghost", onClick: () => onCreateAt(group.day) }, t("action.new")) : null
                 ),
                 group.items.map((event) => h(Row, { key: eventKey(event), event, onClick: onPick, conflicted: conflicted?.has(event) }))
             )));
@@ -2317,14 +2318,14 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     return h("div", { className: styles["dshc-grid"], "aria-busy": true },
                         Array.from({ length: configured === null ? 7 : 14 }, (_, key) => h("div", { className: styles["dshc-skel"], key })));
                 }
-                const calendarProps = { anchor, events: visibleEvents, conflicted, onPick: openEvent, onCreateAt: createAt };
+                const calendarProps = { anchor, events: visibleEvents, conflicted, onPick: openEvent, onCreateAt: createAt, canCreate: !readOnly };
                 const calendar = view === "week"
                     ? h(WeekView, { ...calendarProps, onReschedule: demo || conn?.readOnly === true ? undefined : reschedule })
                     : view === "agenda" ? h(AgendaView, calendarProps) : h(MonthView, calendarProps);
                 const message = !demo && !showCalendar
                     ? calendarText("当前日历已隐藏。", "The connected calendar is hidden.")
                     : !demo && view !== "agenda" && !data.loading && data.events.length === 0 && !data.error
-                        ? calendarText("这段时间没有日程。点日期格或「新建日程」开始。", "Nothing scheduled in this range. Click a date or use New event.")
+                        ? readOnly ? calendarText("这段时间没有日程。", "Nothing scheduled in this range.") : calendarText("这段时间没有日程。点日期格或「新建日程」开始。", "Nothing scheduled in this range. Click a date or use New event.")
                         : null;
                 return h(React.Fragment, null,
                     message ? h("p", { className: styles["dshc-emptyhint"], role: "status" }, message) : null,
