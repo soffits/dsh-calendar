@@ -823,7 +823,7 @@ textarea.dshc-input { min-height: 64px; resize: vertical; }
   .dshc-root[data-main="true"] .dshc-week { flex: none; max-height: 440px; }
   .dshc-cell { min-height: 82px; padding-inline: 3px; }
   .dshc-chip { padding-inline: 2px; }
-  .topbar { padding-inline: 8px; gap: 6px; }
+  .topbar, .dshc-root[data-main="true"] > .dshc-shell > .topbar { padding-inline: 8px; gap: 6px; }
   .topbar > [role="tablist"] { order: 3; width: 100%; overflow-x: auto; }
   .topbar > [role="tablist"] > [role="tab"] { flex: none; padding-inline: 6px; font-size: 12px; white-space: nowrap; }
   .topActions { gap: 4px; }
