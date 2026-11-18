@@ -74,6 +74,8 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 "move.saved": "已改期",
                 "move.undo": "撤销",
                 "move.failed": "改期失败：{message}",
+                "fab.label": "在每个页面右下角显示日历小按钮",
+                "fab.hint": "关掉后仍可从侧栏打开日历。",
                 "conn.button": "连接设置",
                 "conn.title": "CalDAV 连接设置",
                 "conn.intro": "测试连接不会修改日历。连接成功后，点击“保存并启用”。",
@@ -172,6 +174,8 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 "move.saved": "Rescheduled",
                 "move.undo": "Undo",
                 "move.failed": "Could not reschedule: {message}",
+                "fab.label": "Show the floating calendar button on every page",
+                "fab.hint": "Turned off, the calendar is still in the sidebar.",
                 "conn.button": "Connection",
                 "conn.title": "CalDAV connection",
                 "conn.intro": "Testing the connection does not change your calendar. Once it succeeds, click Save and enable.",
@@ -2427,7 +2431,41 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             return new Date(shifted.getFullYear(), shifted.getMonth(), Math.min(date.getDate(), lastDay));
         }
         /** 设置页里的那一节。 */
-        function CalendarSection({ workbench = false } = {}) { return h(CalendarPanel, { workbench }); }
+        function CalendarSection({ workbench = false } = {}) {
+            useUILanguage();
+            return h("div", null, workbench ? null : h(FloatingButtonSetting, {}), h(CalendarPanel, { workbench }));
+        }
+        /** 右下角小按钮要不要显示：每个人自己的设置，存在服务器上，Launcher 实时读。 */
+        const FAB_EVENT = "dsh-calendar:preferences";
+        function useFloatingButton() {
+            const [state, setState] = useState({ show: true, editable: false });
+            useEffect(() => {
+                let alive = true;
+                const read = () => api("connection", {}).then((value) => {
+                    if (alive) setState({ show: value?.floatingButton !== false, editable: value?.floatingButtonEditable === true });
+                }).catch(() => { });
+                read();
+                window.addEventListener(FAB_EVENT, read);
+                return () => { alive = false; window.removeEventListener(FAB_EVENT, read); };
+            }, []);
+            return state;
+        }
+        function FloatingButtonSetting() {
+            const { show, editable } = useFloatingButton();
+            const [busy, setBusy] = useState(false);
+            if (!editable) return null;
+            const change = (checked) => {
+                setBusy(true);
+                api("setPreferences", { floatingButton: checked })
+                    .then(() => window.dispatchEvent(new Event(FAB_EVENT)))
+                    .catch(() => { })
+                    .finally(() => setBusy(false));
+            };
+            return h("label", { style: { display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", fontSize: 13 } },
+                h("input", { type: "checkbox", checked: show, disabled: busy, onChange: (event) => change(event.target.checked) }),
+                h("span", null, t("fab.label")),
+                h("span", { style: { opacity: 0.65 } }, t("fab.hint")));
+        }
         /** 对话页右下角的小按钮 + 悬浮面板（自己挂 root，不占用宿主槽位）。 */
         function Launcher() {
             const [activePanel, setActivePanel] = useState(null);
@@ -2441,6 +2479,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 return panelInfo.subscribe(update);
             }, []);
             useUILanguage();
+            const { show } = useFloatingButton();
             const [dshStyle] = useDshStyle(React);
             const [open, setOpen] = useState(false);
             const [layerOpen, setLayerOpen] = useState(false);
@@ -2458,7 +2497,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 document.addEventListener("keydown", onKey);
                 return () => document.removeEventListener("keydown", onKey);
             }, [open, layerOpen]);
-            if (activePanel) return null;
+            if (activePanel || !show) return null;
             return h("div", null,
                 h("button", {
                     type: "button",

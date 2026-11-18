@@ -89,3 +89,5 @@ Set `people` (verified user id → person) or `peopleFile` (+ `peopleKey`), and 
 ```
 
 The user id comes from a `requestIdentity` service (dsh-oidc provides one); without it, or for someone with no mapping, the panel refuses instead of showing a shared calendar. The password is read on the server and never sent to the browser. `tools: false` removes the model-facing tools and keeps the panel.
+
+The floating calendar button in the bottom-right corner is on by default. Each person can turn theirs off in the calendar section of Settings, which stores `"floatingButton": false` in their connection file; without per-person connections, set `floatingButton: false` on the plugin row.

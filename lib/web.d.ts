@@ -110,7 +110,12 @@ export interface CalendarSettingsBackendOptions {
         person: string;
         calendars: string[];
         readOnly: boolean;
+        floatingButton?: boolean;
     };
+    /** Per-person backend: where a preference is kept. */
+    savePreference?: (key: 'floatingButton', value: boolean) => Promise<void>;
+    /** The row's `floatingButton`, the default for everyone who has not chosen. */
+    floatingButton?: () => boolean | undefined;
     settings?: CalendarSettingsFace;
     /** 宿主 ctx：用来懒接入 settings 服务（不赌子 fiber 的时序）。 */
     ctx?: any;

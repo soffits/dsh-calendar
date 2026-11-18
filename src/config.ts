@@ -21,6 +21,8 @@ export interface CalendarOAuthCredentials {
 export interface CalendarConfig {
   /** `false` registers no model tools (the panel stays). */
   tools?: boolean
+  /** `false` hides the floating calendar button on every page (default on). A person's own `floatingButton` in their connection file wins. */
+  floatingButton?: boolean
   people?: Record<string, string>
   peopleFile?: string
   peopleKey?: string

@@ -21,7 +21,7 @@ import { asRecord, assertIsoTime, assertTimeRange, isoNoMillis, optionalString, 
 import type { CalendarEvent } from './ical.js'
 import type { AvailabilityInput, AvailabilityResult } from './availability.js'
 import { DRAFT_BODY_LIMIT, type DraftModel } from './quick-draft.js'
-import { loadPersonConnection, peopleEnabled, personFor, type PeopleOptions, type PersonConnection, type RequestIdentityLike } from './people.js'
+import { loadPersonConnection, peopleEnabled, personFor, savePersonPreference, type PeopleOptions, type PersonConnection, type RequestIdentityLike } from './people.js'
 import { createMultiService } from './multi.js'
 
 /** 面板与浏览器说话的同源路由。 */
@@ -191,7 +191,11 @@ export interface CalendarSettingsBackendOptions {
   /** The `requestIdentity` service right now, if a sign-in plugin provides one. */
   identity?: () => RequestIdentityLike | undefined
   /** Set on a per-person backend: its calendars and whether it may write. */
-  scope?: { person: string; calendars: string[]; readOnly: boolean }
+  scope?: { person: string; calendars: string[]; readOnly: boolean; floatingButton?: boolean }
+  /** Per-person backend: where a preference is kept. */
+  savePreference?: (key: 'floatingButton', value: boolean) => Promise<void>
+  /** The row's `floatingButton`, the default for everyone who has not chosen. */
+  floatingButton?: () => boolean | undefined
   settings?: CalendarSettingsFace
   /** 宿主 ctx：用来懒接入 settings 服务（不赌子 fiber 的时序）。 */
   ctx?: any
@@ -330,6 +334,8 @@ export class CalendarSettingsBackend {
       ...(reason !== undefined ? { reason } : {}),
       ...(this.options.scope !== undefined ? { person: this.options.scope.person, calendars: this.options.scope.calendars } : {}),
       readOnly: this.options.scope?.readOnly === true,
+      floatingButton: this.options.scope?.floatingButton ?? this.options.floatingButton?.() !== false,
+      floatingButtonEditable: this.options.savePreference !== undefined,
       settingsAvailable: this.settings !== undefined,
       ...(this.settings?.kind !== undefined ? { settingsKind: this.settings.kind } : {}),
       ...(this.options.settingsReason !== undefined ? { settingsReason: this.options.settingsReason } : {}),
@@ -457,7 +463,14 @@ export class CalendarSettingsBackend {
       config: connection.config,
       env: this.options.env ?? {},
       draftModel: this.options.draftModel,
-      scope: { person, calendars: connection.calendars.map((calendar) => calendar.name), readOnly: connection.readOnly },
+      floatingButton: this.options.floatingButton,
+      scope: {
+        person, calendars: connection.calendars.map((calendar) => calendar.name), readOnly: connection.readOnly,
+        floatingButton: connection.floatingButton ?? this.options.floatingButton?.() !== false,
+      },
+      ...(this.options.people?.connectionsDir
+        ? { savePreference: (key: 'floatingButton', value: boolean) => savePersonPreference(this.options.people!.connectionsDir!, person, key, value) }
+        : {}),
       ...(service !== undefined ? { serviceFactory: () => service } : {}),
     })
     this.scoped.set(person, { key, backend })
@@ -494,6 +507,12 @@ export class CalendarSettingsBackend {
   async dispatch(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
     const action = typeof body.action === 'string' ? body.action : ''
     if (action === 'status' || action === 'connection') return this.connection()
+    if (action === 'setPreferences') {
+      if (typeof body.floatingButton !== 'boolean') throw new Error('floatingButton must be true or false')
+      if (this.options.savePreference === undefined) throw new Error('This preference is set in the calendar row of the profile (floatingButton).')
+      await this.options.savePreference('floatingButton', body.floatingButton)
+      return { connection: { ...this.connection(), floatingButton: body.floatingButton } }
+    }
     if (action === 'discoverICloud') {
       const draft = connectionDraft(body)
       const current = this.configOf()

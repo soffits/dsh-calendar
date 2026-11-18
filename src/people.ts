@@ -12,7 +12,7 @@
  * The password is read from `passwordFile` (or `password`) when a service is built and never
  * leaves the process. Without a mapping the plugin keeps its single shared connection.
  */
-import { readFile, stat } from 'node:fs/promises'
+import { chmod, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CalendarConfig } from './config.js'
 
@@ -30,6 +30,8 @@ export interface PersonConnection {
   calendars: CalendarRef[]
   readOnly: boolean
   writeCalendar?: string
+  /** The person's own choice for the floating button; undefined = they have not chosen. */
+  floatingButton?: boolean
 }
 
 export interface RequestIdentityLike { current(): { id: string; name?: string } | null }
@@ -85,5 +87,19 @@ export async function loadPersonConnection(dir: string, person: string): Promise
   return {
     config, calendars, readOnly: raw.readOnly !== false,
     ...(text('writeCalendar') !== undefined ? { writeCalendar: text('writeCalendar')! } : {}),
+    ...(typeof raw.floatingButton === 'boolean' ? { floatingButton: raw.floatingButton } : {}),
   }
+}
+
+/** Keep one preference with the person's other calendar settings: rewrite their file, every other key untouched. */
+export async function savePersonPreference(dir: string, person: string, key: 'floatingButton', value: boolean): Promise<void> {
+  if (!SAFE_PERSON.test(person)) throw new Error('No calendar file for this person.')
+  const file = join(dir, person + '.json')
+  const { mode } = await stat(file).catch(() => { throw new Error('This person has no connection file to keep settings in.') })
+  const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>
+  raw[key] = value
+  const temp = file + '.tmp'
+  await writeFile(temp, JSON.stringify(raw, null, 2) + '\n', { mode })
+  await chmod(temp, mode)
+  await rename(temp, file)
 }

@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.20.0 (2026-11-18)
+
+- Add a way to turn the floating calendar button off. With per-person connections each person ticks "Show the floating calendar button" in the calendar section of Settings (kept as `floatingButton` in their connection file, read live); otherwise set `floatingButton: false` on the plugin row. Default stays on.
+
 ## 0.19.2 (2026-11-17)
 
 - Phones: the host's leading window clearance now only indents the first row instead of the whole panel, so the grid and agenda use the full width; the mini calendar is hidden under 620 px (the month grid and agenda already navigate).

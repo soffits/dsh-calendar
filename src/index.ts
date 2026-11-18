@@ -195,6 +195,7 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
       get connectionsDir() { return cfg.connectionsDir ?? '' },
     },
     identity,
+    floatingButton: () => cfg.floatingButton,
     ...(attached.reason !== undefined ? { settingsReason: attached.reason } : {}),
   })
   try {

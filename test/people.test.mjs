@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { CalendarSettingsBackend, fetchVerdict } from '../lib/web.js'
 import { loadPersonConnection, personFor } from '../lib/people.js'
 import { apply } from '../lib/index.js'
@@ -120,4 +120,24 @@ test('tools: false registers no model tools and keeps the panel routes', (t) => 
   const off = count({ tools: false })
   assert.equal(off.tools, 0)
   assert.ok(off.routes.includes('/api/dsh-calendar/settings'))
+})
+
+test('a person turns the floating button off and it is kept in their own file', async (t) => {
+  const dir = scratch(t)
+  writePerson(dir, 'ann', { provider: 'custom', username: 'ann', password: 'x', calendars: [{ name: 'A', url: 'https://cal.example/a/' }] })
+  writePerson(dir, 'bob', { provider: 'custom', username: 'bob', password: 'y', calendars: [{ name: 'B', url: 'https://cal.example/b/' }] })
+  const who = { id: 'sub-ann' }
+  const { backend } = peopleBackend(dir, who)
+  const read = async () => (await (await backend.fetch(post({ action: 'connection' }))).json()).value
+  assert.equal((await read()).floatingButton, true, 'on by default')
+  assert.equal((await read()).floatingButtonEditable, true)
+  const reply = await backend.fetch(post({ action: 'setPreferences', floatingButton: false }))
+  assert.equal(reply.status, 200)
+  assert.equal((await read()).floatingButton, false, 'read live, no reload')
+  const stored = JSON.parse(readFileSync(join(dir, 'ann.json'), 'utf8'))
+  assert.equal(stored.floatingButton, false)
+  assert.equal(stored.password, 'x', 'the rest of the file is untouched')
+  who.id = 'sub-bob'
+  assert.equal((await read()).floatingButton, true, 'someone else keeps theirs')
+  assert.equal((await backend.fetch(post({ action: 'setPreferences', floatingButton: 'no' }))).status, 400)
 })

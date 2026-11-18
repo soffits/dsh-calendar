@@ -14,6 +14,8 @@ export interface PersonConnection {
     calendars: CalendarRef[];
     readOnly: boolean;
     writeCalendar?: string;
+    /** The person's own choice for the floating button; undefined = they have not chosen. */
+    floatingButton?: boolean;
 }
 export interface RequestIdentityLike {
     current(): {
@@ -28,3 +30,5 @@ export declare function peopleEnabled(options: PeopleOptions): boolean;
 export declare function personFor(options: PeopleOptions, userId: string, warn?: (message: string) => void): Promise<string | undefined>;
 /** Read one person's connection file; undefined when they have none. */
 export declare function loadPersonConnection(dir: string, person: string): Promise<PersonConnection | undefined>;
+/** Keep one preference with the person's other calendar settings: rewrite their file, every other key untouched. */
+export declare function savePersonPreference(dir: string, person: string, key: 'floatingButton', value: boolean): Promise<void>;
