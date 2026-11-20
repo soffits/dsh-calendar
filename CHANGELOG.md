@@ -1,5 +1,9 @@
 # 更新记录
 
+## Unreleased
+
+- Drop the `dispose` listeners: Cordis 4 has no such event, so they never ran. Unloading the plugin already goes through `ctx.effect`, which is now the only path.
+
 ## 0.20.0 (2026-11-18)
 
 - Add a way to turn the floating calendar button off. With per-person connections each person ticks "Show the floating calendar button" in the calendar section of Settings (kept as `floatingButton` in their connection file, read live); otherwise set `floatingButton: false` on the plugin row. Default stays on.

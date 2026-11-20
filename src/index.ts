@@ -172,13 +172,11 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
     llm = service.llm
     const clearLlm = () => { llm = undefined }
     service.effect?.(() => clearLlm)
-    service.on?.('dispose', clearLlm)
   })
   ctx.inject?.(['attachments'], service => {
     attachments = service.attachments
     const clearAttachments = () => { attachments = undefined }
     service.effect?.(() => clearAttachments)
-    service.on?.('dispose', clearAttachments)
   })
   const backend = new CalendarSettingsBackend({
     config: configOf,
@@ -213,12 +211,7 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
       if (typeof dispose === 'function') dispose()
     }
   }
-  if (typeof ctx.effect === 'function') {
-    ctx.effect(() => cleanupTools)
-  }
-  if (typeof ctx.on === 'function') {
-    ctx.on('dispose', cleanupTools)
-  }
+  ctx.effect?.(() => cleanupTools)
 }
 
 
