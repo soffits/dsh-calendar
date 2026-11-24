@@ -6,22 +6,17 @@ function mount(principal) {
   const routes = new Map()
   const callers = []
   const ctx = {
-    inject(names, callback) {
-      assert.deepEqual(names, ['connection'])
-      callback({
-        connection: {
-          browserPeer: principal === undefined ? undefined : { principal },
-          admit() { throw new Error('Fetch routes receive already authenticated requests') },
-          fetch: {
-            register(route) {
-              routes.set(route.path, route)
-              return () => routes.delete(route.path)
-            },
-          },
+    connection: {
+      browserPeer: principal === undefined ? undefined : { principal },
+      admit() { throw new Error('Fetch routes receive already authenticated requests') },
+      fetch: {
+        register(route) {
+          routes.set(route.path, route)
+          return () => routes.delete(route.path)
         },
-        effect(factory) { factory() },
-      })
+      },
     },
+    effect(factory) { factory() },
   }
   installAuthenticatedCalendar(ctx, caller => {
     callers.push(caller)

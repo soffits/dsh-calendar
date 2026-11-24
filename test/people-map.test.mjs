@@ -16,9 +16,8 @@ function mount(t, config) {
     tools: { register() { return () => {} } },
     get(name) { return name === 'settings' ? provider : name === 'requestIdentity' ? { current: () => user } : undefined },
     effect(fn) { fn() },
-    inject(names, callback) {
-      if (names.includes('connection')) callback({ connection: { admit: () => ({ peer: { principal: { kind: 'owner' } } }), fetch: { register(route) { routes.set(route.path, route); return () => {} } } }, effect(fn) { fn() } })
-    },
+    inject() {},
+    connection: { admit: () => ({ peer: { principal: { kind: 'owner' } } }), fetch: { register(route) { routes.set(route.path, route); return () => {} } } },
   }
   const dir = join(directory, 'people')
   apply(ctx, { tools: false, connectionsDir: dir, ...config(directory) })
