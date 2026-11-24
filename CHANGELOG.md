@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.21.3-soffits.3 (2026-11-24)
+
+- Read-only connections also hide the Today ribbon's Quick add and the edit button on agenda and all-day rows.
+
 ## 0.21.3-soffits.2 (2026-11-24)
 
 - Runs on DSH 0.2.2-rc.1 again. `engines.dsh` goes back to `>=0.2.2-rc.1`; upstream's `>=0.2.2-rc.3` kept DSH from activating the plugin at all. The panel routes also mount from the plugin's own `connection` injection, since rc.1 doesn't mount routes registered from a nested inject.

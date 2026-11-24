@@ -363,6 +363,7 @@ test('a read-only connection shows no create or import controls, and each calend
     await react.act(async () => new Promise(r => setTimeout(r, 30)));
     const buttons = () => [...container.querySelectorAll('button')].map(b => b.textContent.trim());
     assert.equal(buttons().some(text => text.includes('新建日程')), false, 'no New event button');
+    assert.equal(buttons().some(text => text.includes('快速新建')), false, 'no Quick add in the Today ribbon');
     assert.equal([...container.querySelectorAll('[role="tab"]')].some(tab => tab.textContent.includes('导入')), false, 'no Import tab');
     const cell = container.querySelector('.dshc-cell');
     assert.ok(cell);
@@ -371,6 +372,10 @@ test('a read-only connection shows no create or import controls, and each calend
     const work = boxes.find(box => box.closest('label')?.textContent.includes('Work'));
     assert.ok(boxes.find(box => box.closest('label')?.textContent.includes('Home')) && work, 'one checkbox per calendar');
     assert.match(container.textContent, /Work thing/);
+    const agendaTab = [...container.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('议程'));
+    await react.act(async () => { agendaTab.click(); });
+    assert.ok(container.querySelector('[data-dsh-row]'), 'agenda rows render');
+    assert.equal(container.querySelector('.dsh-row-actions'), null, 'read-only rows have no edit action');
     await react.act(async () => { work.click(); });
     assert.doesNotMatch(container.textContent, /Work thing/, 'unticking a calendar hides its events');
     assert.match(container.textContent, /Home thing/);
