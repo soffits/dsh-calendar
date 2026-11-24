@@ -12,7 +12,8 @@ function mount(t,extra={}){
  const provider={register(_ns,_schema,options){return {get:()=>options.base}},describe:()=>[],async replace(){throw new Error('Owner settings must not be modified in tenant tests')}}
  const ctx={settings:provider,tools:{register(tool){tools.set(tool.name,tool);return()=>tools.delete(tool.name)}},
   get(name){return name==='settings'?provider:name==='requestIdentity'?identityProvider:undefined},effect(fn){fn()},
-  inject(names,callback){injected.push(names);if(names.includes('connection'))callback({connection:{admit:()=>rejection?{rejection}:{peer:{principal}},fetch:{register(route){routes.set(route.path,route);return()=>{}}}},effect(fn){fn()}})},
+  connection:{admit:()=>rejection?{rejection}:{peer:{principal}},fetch:{register(route){routes.set(route.path,route);return()=>{}}}},
+  inject(names,callback){injected.push(names)},
  }
  apply(ctx,{perUser:true,connectionsDir:directory,provider:'custom',username:'OWNER',password:'OWNER-SECRET',caldavUrl:'https://owner.invalid/calendar/',...extra})
  const request=async(body,headers={})=>{

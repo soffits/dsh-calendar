@@ -27,7 +27,7 @@ export type Config = CalendarConfig
 
 /** cordis 服务注入：apply 里要用 ctx.tools，必须显式声明注入，否则宿主会抛 cannot get property without inject。 */
 export const name = 'calendar'
-export const inject = ['tools', 'settings']
+export const inject = ['tools', 'settings', 'connection']
 
 /** 组合包补丁里那一行的 id；拿不到 fiber 时用它兜底。 */
 const ENTRY_ID = 'calendar'

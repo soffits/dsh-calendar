@@ -83,8 +83,9 @@ async function mountEnv({ withHostModal = false, darkHost = false, events = [], 
   return { win, react, probe: captured.__themeProbe, render };
 }
 
-test('DSH >=0.2.2-rc.3 manifest, window clearances and drag exclusion are intact, and no self-updater ships', async () => {
-  assert.equal(PKG.engines?.dsh, '>=0.2.2-rc.3');
+test('DSH >=0.2.2-rc.1 manifest, window clearances and drag exclusion are intact, and no self-updater ships', async () => {
+  // This fork runs on DSH 0.2.2-rc.1.
+  assert.equal(PKG.engines?.dsh, '>=0.2.2-rc.1');
   assert.deepEqual(PKG.dsh?.client?.inject, [
     '@deepseek-ai/dsh-client-ui-settings',
     '@deepseek-ai/dsh-client-ui-layout',
