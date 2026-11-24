@@ -689,7 +689,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
         }
         /** 议程里的一行：时间列 + 标题/地点 + 重复角标。 */
         function Row(props) {
-            const { event, onClick, conflicted } = props;
+            const { event, onClick, conflicted, editable = true } = props;
             const meta = [];
             if (event.location)
                 meta.push(event.location);
@@ -712,9 +712,9 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                         meta.length > 0 ? h("span", { className: styles["dshc-meta"] }, meta.join(" · ")) : null
                     )
                 ),
-                h("div", { className: clsx("dsh-row-actions", styles.rowActions) },
+                editable && event.readOnly !== true ? h("div", { className: clsx("dsh-row-actions", styles.rowActions) },
                     h(IconButton, { icon: "edit", label: calendarText("查看或编辑日程", "Inspect or edit event"), onClick: () => onClick(event) })
-                )
+                ) : null
             );
         }
         /** 月视图：6×7 网格；每格最多 3 条，多的收成「+N」。 */
@@ -1099,7 +1099,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 );
             });
             return h("div", { className: styles.weekView }, allDay.length > 0
-                ? h("div", { className: styles.allDayList }, allDay.map((event) => h(Row, { key: eventKey(event), event, onClick: onPick, conflicted: conflicted?.has(event) })))
+                ? h("div", { className: styles.allDayList }, allDay.map((event) => h(Row, { key: eventKey(event), event, onClick: onPick, conflicted: conflicted?.has(event), editable: canCreate })))
                 : null, h("div", { className: "dshc-week", ref: scroller }, hoursColumn, dayColumns), canEdit === true ? h("div", { className: styles["dshc-draghint"] }, t("drag.hint")) : null);
         }
         /** 议程视图：从今天起按天分组，最像「接下来要干什么」。 */
@@ -1125,7 +1125,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                     h("span", { className: styles["dshc-spacer"] }),
                     canCreate ? h(Btn, { variant: "ghost", onClick: () => onCreateAt(group.day) }, t("action.new")) : null
                 ),
-                group.items.map((event) => h(Row, { key: eventKey(event), event, onClick: onPick, conflicted: conflicted?.has(event) }))
+                group.items.map((event) => h(Row, { key: eventKey(event), event, onClick: onPick, conflicted: conflicted?.has(event), editable: canCreate }))
             )));
         }
         // ───────────────────────────── 数据 ─────────────────────────────
@@ -2425,6 +2425,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                         events: visibleEvents,
                         conflicts,
                         canCreate,
+                        readOnly,
                         configured,
                         demo,
                         onJumpToday: () => setAnchor(new Date()),

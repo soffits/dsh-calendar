@@ -48,7 +48,7 @@ function formatCountdownBadge(event, now) {
     return calendarText(days + " 天后", "in " + days + "d");
 }
 
-function TodayFocusRibbon({ events, conflicts, canCreate, configured, demo, onJumpToday, onOpenEvent, onReviewConflicts, onCreate }) {
+function TodayFocusRibbon({ events, conflicts, canCreate, readOnly = false, configured, demo, onJumpToday, onOpenEvent, onReviewConflicts, onCreate }) {
     const now = new Date();
     const todayText = UI_LANG === "en"
         ? now.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })
@@ -100,7 +100,7 @@ function TodayFocusRibbon({ events, conflicts, canCreate, configured, demo, onJu
                 h(Icon, { name: "check", size: 13 }),
                 h("span", null, calendarText("无时间冲突", "Conflict-free"))
             ),
-            h("button", {
+            readOnly ? null : h("button", {
                 type: "button",
                 className: styles.focusQuickNew,
                 disabled: !canCreate,
