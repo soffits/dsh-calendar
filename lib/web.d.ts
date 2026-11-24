@@ -3,7 +3,7 @@
  *
  * 与 dsh-email 的设置路由同一套安全模型，理由也一样：这个路由能读用户的
  * 全部日程、还能替用户改/删日程，而宿主 webserver 有可能绑定在 0.0.0.0。
- * 四道门缺一不可 ——
+ * 旧 loopback 兼容路由的四道门缺一不可（新的 /api 路由由宿主认证管线承载）——
  *   1. remoteAddress 必须是回环地址（局域网不可达）；
  *   2. Host 头必须是 localhost 名（挡 DNS rebinding：恶意域名解析到 127.0.0.1）；
  *   3. 写操作要求 application/json（跨源页面无法用简单请求绕过预检）+
@@ -18,26 +18,13 @@ import { type CalendarSettingsValue } from './settings.js';
 import type { CalendarEvent } from './ical.js';
 import type { AvailabilityInput, AvailabilityResult } from './availability.js';
 import { type DraftModel } from './quick-draft.js';
-import { type PeopleOptions, type RequestIdentityLike } from './people.js';
 /** 面板与浏览器说话的同源路由。 */
 export declare const SETTINGS_ROUTE = "/_dsh/dsh-calendar/settings";
 export declare const DRAFT_ROUTE = "/_dsh/dsh-calendar/draft";
-/** The routes the browser really calls: they go through DSH's own request pipeline, so its sign-in covers them. */
-export declare const SETTINGS_API_ROUTE = "/api/dsh-calendar/settings";
-export declare const DRAFT_API_ROUTE = "/api/dsh-calendar/draft";
 /** Host 头裁决：undefined = 放行，否则给出拒绝原因。 */
 export declare function hostVerdict(host: unknown): string | undefined;
 /** 写操作裁决：undefined = 放行，否则给出状态码与原因。 */
 export declare function postVerdict(headers: Record<string, unknown>): {
-    status: number;
-    message: string;
-} | undefined;
-/**
- * Gate for a request that arrived through DSH's request pipeline (sign-in already checked there):
- * JSON only, and a browser-sent Origin or Sec-Fetch-Site must say same-origin. Unlike the
- * loopback-only route this works behind a reverse proxy.
- */
-export declare function fetchVerdict(request: Request): {
     status: number;
     message: string;
 } | undefined;
@@ -101,21 +88,6 @@ export interface CalendarSettingsBackendOptions {
     }>;
     env?: NodeJS.ProcessEnv;
     draftModel?: () => DraftModel | undefined;
-    /** Several people share this DSH: who is who, and where each person's connection file lives. */
-    people?: PeopleOptions;
-    /** The `requestIdentity` service right now, if a sign-in plugin provides one. */
-    identity?: () => RequestIdentityLike | undefined;
-    /** Set on a per-person backend: its calendars and whether it may write. */
-    scope?: {
-        person: string;
-        calendars: string[];
-        readOnly: boolean;
-        floatingButton?: boolean;
-    };
-    /** Per-person backend: where a preference is kept. */
-    savePreference?: (key: 'floatingButton', value: boolean) => Promise<void>;
-    /** The row's `floatingButton`, the default for everyone who has not chosen. */
-    floatingButton?: () => boolean | undefined;
     settings?: CalendarSettingsFace;
     /** 宿主 ctx：用来懒接入 settings 服务（不赌子 fiber 的时序）。 */
     ctx?: any;
@@ -130,6 +102,10 @@ export interface CalendarSettingsBackendOptions {
      * 0.1.7 起是 entry id（默认 `calendar`）—— 懒接入这条退路要靠它才认得出自己那一行。
      */
     settingsNs?: string;
+    /** The row's `floatingButton`: the default for everyone who has not chosen. */
+    floatingButton?: () => boolean | undefined;
+    /** A person's own backend: their display preferences are kept in their connection file. */
+    preferences?: boolean;
 }
 /** 把「已存值 + 草稿」合并成要落盘的一版：草稿里缺席的键保留原值。 */
 export declare function mergeConnection(stored: Record<string, unknown>, draft: Record<string, unknown>): Record<string, unknown>;
@@ -169,6 +145,8 @@ export declare class CalendarSettingsBackend {
      * 未配置时 configured:false + reason（resolveConfig 的中文指引），面板据此渲染引导态。
      */
     connection(): Record<string, unknown>;
+    /** Keep a person's display preference next to their connection, every other key untouched. */
+    private setPreferences;
     /** 兼容旧动作名：status 就是连接摘要。 */
     status(): Record<string, unknown>;
     /**
@@ -181,24 +159,14 @@ export declare class CalendarSettingsBackend {
     private responseJson;
     /** 路由入口。GET = 读状态，POST = 动作（list/create/update/delete）。 */
     handle(req: any, res: any, draft?: boolean): Promise<void>;
-    private scoped;
-    /** The backend that answers this request: this one, or the signed-in person's own. */
-    private backendFor;
-    private scopedBackend;
-    /** Request entry for DSH's own pipeline: identity, same-origin gate, JSON body, action. */
-    fetch(request: Request, draft?: boolean): Promise<Response>;
-    dispatchDraft(body: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
+    /** Internal authenticated carrier entry; authentication is enforced by transport.ts. */
+    fetchAuthenticated(request: Request, draft?: boolean): Promise<Response>;
+    private dispatchDraft;
     /** 动作分发。每个动作自己校验参数，错误信息面向用户（中文，面板直接显示）。 */
-    dispatch(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+    private dispatch;
 }
 /**
  * 把设置页里的日历面板挂到宿主 webserver 上。
  * 与 dsh-email 相同：ctx.inject(['webServer']) + effect 注册，插件卸载即摘掉路由。
  */
 export declare function installCalendarSettingsWeb(ctx: any, backend: CalendarSettingsBackend): void;
-/**
- * Mount the panel's routes on DSH's own request pipeline (`connection.fetch`), the way the import
- * route is mounted. DSH's sign-in applies to them and a sign-in plugin's `requestIdentity` can see
- * who asks, so they work behind a reverse proxy and can tell people apart.
- */
-export declare function installCalendarFetchRoutes(ctx: any, backend: CalendarSettingsBackend): void;

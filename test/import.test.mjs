@@ -79,6 +79,19 @@ test('expired previews and changed credentials cannot write to a different accou
   active = { ...active, password: 'changed' }; await assert.rejects(commit(), /连接已改变/); assert.equal(f.writes.length, 0)
   active = config(); now = 15 * 60 * 1000 + 1; await assert.rejects(commit(), /过期/)
 })
+test('read-only policy activated after preview blocks every import write',async()=>{
+ let active=config();const f=fixture({config:()=>active});
+ const preview=await f.backend.action({action:'preview',ics:wrap(event('one'))});
+ active={...active,readOnly:true};
+ await assert.rejects(f.backend.action({action:'commit',id:preview.id,selected:[preview.rows[0].id],confirmed:true}),/read-only/);
+ assert.equal(f.writes.length,0);
+});
+test('private backend previews cannot be committed through another person backend',async()=>{
+ const alice=fixture(),bob=fixture();
+ const p=await alice.backend.action({action:'preview',ics:wrap(event('one'))});
+ await assert.rejects(bob.backend.action({action:'commit',id:p.id,selected:[p.rows[0].id],confirmed:true}),/过期/);
+ assert.equal(alice.writes.length+bob.writes.length,0);
+});
 test('cancellation before commit and concurrent imports do not issue extra writes', async () => {
   const f = fixture(); const p = await f.backend.action({ action: 'preview', ics: wrap(event('one')) })
   const body = { action: 'commit', id: p.id, selected: [p.rows[0].id], confirmed: true }
@@ -89,11 +102,13 @@ test('cancellation before commit and concurrent imports do not issue extra write
 })
 test('import uses only authenticated carrier registration; cross-origin and null-origin requests fail', async () => {
   const f = fixture(), routes = []
-  installCalendarImport({ connection: { fetch: { register: r => routes.push(r) } } }, f.backend)
+  installCalendarImport({ inject(names, cb) { assert.deepEqual(names, ['connection']); cb({ connection: { fetch: { register: r => routes.push(r) } } }) } }, f.backend)
   assert.equal(routes[0].path, CALENDAR_IMPORT_ROUTE); assert.equal(routes[0].requestBody, 'buffered')
   const request = headers => new Request('http://dsh.internal' + CALENDAR_IMPORT_ROUTE, { method: 'POST', headers: { 'content-type': 'application/json', 'x-dsh-calendar-import': '1', host: '127.0.0.1:8181', ...headers }, body: JSON.stringify({ action: 'zones' }) })
   assert.equal((await f.backend.fetch(request({ origin: 'http://127.0.0.1:8181' }))).status, 200)
-  for (const headers of [{ origin: 'null' }, { origin: 'https://evil.example' }, { 'sec-fetch-site': 'cross-site' }, { 'x-dsh-calendar-import': '' }]) assert.equal((await f.backend.fetch(request(headers))).status, 403)
+  assert.equal((await f.backend.fetch(request({ origin: 'dsh-app://app' }))).status, 200)
+  assert.equal((await f.backend.fetch(request({ origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' }))).status, 200)
+  for (const headers of [{ origin: 'null' }, { origin: 'https://evil.example' }, { origin: 'dsh-app://app.evil' }, { 'sec-fetch-site': 'cross-site' }, { 'x-dsh-calendar-import': '' }]) assert.equal((await f.backend.fetch(request(headers))).status, 403)
 })
 test('UID text cannot escape the collection or change the import filename on retry', async () => {
   const calls = [], service = new CalendarService(resolveConfig(config(), {}))

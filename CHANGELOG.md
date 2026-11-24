@@ -1,34 +1,113 @@
 # 更新记录
 
-## Unreleased
+## 0.21.3-soffits.1 (2026-11-24)
 
-- Drop the `dispose` listeners: Cordis 4 has no such event, so they never ran. Unloading the plugin already goes through `ctx.effect`, which is now the only path.
+This fork now sits on upstream 0.21.3 and keeps only what upstream doesn't have. Upstream's own per-person files, multiple calendars and server-side `readOnly` replace the fork's earlier versions of those.
 
-## 0.20.0 (2026-11-18)
-
-- Add a way to turn the floating calendar button off. With per-person connections each person ticks "Show the floating calendar button" in the calendar section of Settings (kept as `floatingButton` in their connection file, read live); otherwise set `floatingButton: false` on the plugin row. Default stays on.
-
-## 0.19.2 (2026-11-17)
-
-- Phones: the host's leading window clearance now only indents the first row instead of the whole panel, so the grid and agenda use the full width; the mini calendar is hidden under 620 px (the month grid and agenda already navigate).
-
-## 0.19.1 (2026-11-17)
-
+- People map: `people` / `peopleFile` (+ `peopleKey`) map a verified `requestIdentity` id to a person. Several sign-ins can share one person, whose file is `<connectionsDir>/<person>.json` (upstream's `{schemaVersion, revision, value}` format). A configured map turns per-person mode on by itself. Sign-ins outside the map keep upstream's private hashed file.
+- `passwordFile`: a connection can point at a file holding its password, read on the server when the connection is built. Saving the connection form keeps it.
+- `floatingButton`: `false` on the row hides the floating button by default. Each person can choose for themselves in Settings, and that choice is kept in their file.
+- Read-only connections hide New event, Import ICS, drag-to-reschedule, the N hint and the create affordances in month, week and agenda. Event review disables edit and delete for read-only events.
+- The sidebar lists every connected calendar with its own show/hide checkbox, and rows name their calendar.
 - Agenda: an all-day event no longer jumps ahead of earlier days.
-- Phones: the sidebar stacks (mini calendar, then the calendars) under 620 px, long names wrap instead of clipping, agenda rows no longer scroll sideways, touch targets are 40 px, and keyboard hints are hidden on touch.
-- The sidebar lists each connected calendar with its own show/hide checkbox.
-- UI chrome is not text-selectable; fields and dialogs still are.
-- Read-only connections hide New event, Import ICS and the N hint instead of disabling them; a per-person connection also hides the CalDAV tab.
-- Remove the header style, layout and palette pickers: the panel follows DSH's own theme.
+- Phones: only the header keeps clear of the host's window controls. The sidebar stacks into one column under 620 px and the mini calendar is hidden there. Long names wrap, and agenda rows no longer scroll sideways. Touch targets are 40 px, keyboard hints are hidden on touch, and UI chrome can't be text-selected.
+- Removed the style, font, layout and palette pickers (the panel follows DSH's theme). The guide no longer opens by itself, and its layout step is gone.
+- Removed the bundled `@stardustlc/dsh-updates` updater: this fork ships from its own repository, and the in-panel update button would have replaced it with the upstream npm package.
 
-## 0.19.0 (2026-11-17)
+## 0.21.3 (2026-11-23)
 
-- Add `tools: false` to turn the model-facing tools off and keep the panel.
-- Move the panel's settings and draft routes onto DSH's own request pipeline (`/api/dsh-calendar/settings`, `/api/dsh-calendar/draft`), so they work behind a reverse proxy; the loopback-only route is no longer mounted.
-- Add per-person connections: `people` / `peopleFile` (+ `peopleKey`) map a verified `requestIdentity` user id to a person, and `connectionsDir/<person>.json` holds that person's account, `passwordFile`, several calendars and `readOnly` (default true). Each person only sees their own; credentials stay on the server. Without a mapping the single shared connection works as before.
-- Lower the `dsh` engine requirement to `>=0.2.2-rc.1` (the panel and tools run on it), and register the routes from the plugin's own `connection` injection.
-- Drop the plugin's own `connection.json` fallback: the connection now has one source (the profile row, or the person's file in per-person mode). Without a host settings service the panel is read-only.
-- Events carry the name of the calendar they came from; a read-only connection refuses create, edit and drag in the panel and on the server.
+- 修复 Harness 0.2.3 Alpha 中连接、ICS 导入和智能草稿接口返回 400。日历复用宿主对 Fetch 路由的鉴权，继续核对用户身份，并支持无请求体的连接状态查询。
+- Fix connection, ICS import and Smart Draft requests on Harness 0.2.3 Alpha by using the host-authenticated Fetch carrier and supporting bodyless connection status requests.
+
+## 0.21.2 (2026-11-23)
+
+- 先确认日历连接，再请求日程。首次安装未配置账号时可直接进入连接设置或查看示例，避免提前拉取日程引发错误提示。面板也会显示宿主返回的具体错误。
+- Check the connection before listing events. A fresh installation can proceed to setup or the sample calendar without a failed event request, and the workbench displays detailed host errors.
+
+## 0.21.1 (2026-11-23)
+
+- **反代子路径与 DSH 桌面端认证修复**：将智能草稿路由 `DSH_CALENDAR_DRAFT_ROUTE` 改为相对路径 `api/dsh-calendar/draft`，确保反向代理子路径挂载下不逃逸站点根；在全部 3 条宿主认证路由（`/api/dsh-calendar/settings`、`/api/dsh-calendar/draft`、`/api/dsh-calendar/import`）统一豁免 DSH 桌面端 `Origin: dsh-app://app`（含 `Sec-Fetch-Site`），并补充单测覆盖。
+- **打包收窄与文档同步**：将 `package.json` `files` 中的 `"scripts"` 收窄为 `"scripts/google-oauth.mjs"`；更新源码过时注释与中英 `USAGE` / `REFERENCE` 文档（补齐 `calendar_find_time`、认证通道 `/api/dsh-calendar/*`、`scripts/google-oauth.mjs` 说明、多集合 `calendars[]`、`scope:"series"`、语言切换链接与兼容更新范围文案）。
+- **Reverse-Proxy Subpath & DSH Desktop Origin Fixes**: Changed `DSH_CALENDAR_DRAFT_ROUTE` to relative `api/dsh-calendar/draft` so Smart Draft stays inside reverse-proxy subpath mounts; exempted DSH Desktop `Origin: dsh-app://app` (including `Sec-Fetch-Site`) across all three authenticated routes (`/settings`, `/draft`, `/import`) with unit tests.
+- **Packaging & Docs**: Narrowed `package.json` `files` from `"scripts"` to `"scripts/google-oauth.mjs"`, updated stale source comments, and synced bilingual `USAGE` and `REFERENCE` docs (`calendar_find_time`, `/api/dsh-calendar/*`, OAuth helper CLI, multi-collection `calendars[]`, `scope:"series"`, language links, and compatible update-scope wording).
+
+## 0.21.0 (2026-11-22)
+
+- **默认 Bento 卡片工作室布局 + 今日聚焦条（`TodayFocusRibbon`）**：
+  - 首次打开工作台默认呈现立体卡片式 **Bento** 布局（兼容 `bento` 偏好键，顶栏仍可一键切换 `原生 / 浮岛 / 聚光 / Bento` 与 13 套设计风格 + 8 种字体）。
+  - 在日历画布上方新增紧凑 **今日聚焦条**：实时显示今日日期徽章（一键回跳今天）、下一场日程实时倒计时胶囊（点击直达详情）、无冲突/冲突预警指示，以及一键 `+ 快速新建` 胶囊。
+- **交互引导、英文顶栏适配与文档焕新**：更新 4 步「? 引导」聚光灯导览（聚焦今日条 -> Bento 布局与视图 -> 找空闲时段与一键复制指令 -> 冲突核对与智能草稿），优化英文顶栏标签与响应式断点，同步刷新双语 README、使用说明、工作台说明、8 张浅深色流程示意图与最新工作台实景截图。
+- **Default Bento Studio Layout + Live Today Focus Ribbon**: opens fresh sessions directly in tactile **Bento** card layout (keeping 1-click `Native / Floating / Spotlight / Bento` switching + 13 styles & 8 fonts) and adds a compact **Today Focus Ribbon** above the calendar canvas (today badge, next-event countdown pill, conflict status indicator, and 1-click `+ Quick add`). Includes updated 4-step `? Tour`, crisp English header layout, and refreshed bilingual docs, workflow SVGs, and screenshots.
+
+## 0.20.5 (2026-11-20)
+
+- 保留省略 calendars 配置的语义，恢复仅配置 caldavUrl 的单日历连接；显式空数组仍按原规则校验。
+
+- 升级共享更新组件至 0.2.10，移除跨插件右下角浮动提醒，保留工作台及插件详情页更新控制。
+
+- 空闲时间查询按需计算工作分钟，满足候选数量后停止后续日期计算，保留时区、DST、全天事件和缓冲语义。
+
+## 0.20.4 (2026-11-20)
+
+- 串行刷新 OAuth 凭据，避免并发请求重复兑换同一轮换令牌；排队请求取消不影响其他调用，失败后仍可重试。
+- Serialize OAuth refresh exchanges while preserving independent cancellation and retry after a failed exchange.
+- 同一连接下的多个日历集合共享刷新状态，避免多集合并发再次兑换同一令牌；不同连接和租户保持隔离。轮换令牌延续现有内存缓存契约，不新增持久化存储。
+- 同步共享更新组件 0.2.9，修复取消窗口和失败响应清理，并确保运行中旧协调器在空闲后接管修复。
+
+## 0.20.3 (2026-11-20)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.7`：对话页「有新版本」提醒浮卡支持无交互 15 秒自动收起（悬停、聚焦、查看记录或确认弹窗时自动暂停，安装成功提示 6 秒收起，安装中/失败/需要重启仍保持常驻不隐藏）。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.7`: auto-dismiss idle update reminder cards after 15s and silent complete cards after 6s while pausing on hover/focus/notes/dialogs and keeping active, failed, or restart-required cards pinned.
+
+## 0.20.2 (2026-11-20)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.6`：端到端验收修复浮卡与日历按钮重叠、详情页/工作台挂载时瞬时让位及 `package-moved` / 包管理器报错诊断文案，继续保持过期检查自动刷新与 `bundle-in-use` 指导。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.6`: E2E-verified fixes for floating Calendar FAB clearance, immediate reminder yield on native detail/workbench mount, and clearer `package-moved` / package-manager error messages, alongside auto-refresh and `bundle-in-use` guidance.
+
+## 0.20.1 (2026-11-20)
+
+- 在备用弹窗中，子菜单优先处理 Escape，避免误关外层表单。
+- Let nested controls consume Escape before closing a fallback dialog.
+- 旧设置和草稿路由先执行 DSH 鉴权；连接测试不再复用待清除的凭据。
+
+## 0.20.0 (2026-11-19)
+
+- 修复工作台弹窗及 fallback 控件反复重挂载造成的失焦；增加模型工具总开关和逐工具开关，拼错配置明确报错。
+- 设置和智能草稿接入宿主认证 Fetch 管线，支持正确配置的反代域名与子路径；多用户模式使用可信身份与独立版本化连接文件，拒绝身份缺失时降级读取 owner 凭据。
+- 支持连接内多个日历集合、明确写入目标、连接/集合只读策略，并在工具、面板和 ICS 导入统一执行；空闲查询合并全部集合的完整繁忙展开。
+- Preserve modal identity; add model-tool switches, authenticated proxy carriers, opt-in person isolation, multiple collections and server-enforced read-only writes. See docs/MULTIUSER.md for identity-provider and deployment validation limits.
+
+## 0.19.0 (2026-11-18)
+
+- **UI v3 全新视觉与交互升级**：13 种高质感浅色预设（新增 `glass` 晴昼琉璃、`eink` 护眼墨水屏、`blueprint` 工程晒图、`risograph` 波普孔版、`win98` 千禧复古、`songhui` 宋韵朱砂、`frutiger` 晴空水晶、`gazette` 铅字晨报），以及 8 套独立的中英双层字体搭配（默认 `arcade` 幼圆等宽，支持 `auto` 风格专属字、`songkai` 中宋+楷书、`fangsong` 工程仿宋、`poster` 重磅画报黑、`retro98` 千禧新宋、`serif` 思源书宋、`modern` 现代思源黑）。
+- 紧凑单行 48px 工作台顶栏（精简布局胶囊与快捷键标签）、滑动选项卡指示条、可拖拽调节日程侧栏、主题着色微光骨架屏、议程行悬浮快捷操作栏、`[data-dsh-serif]` 标题排版，以及全量浮层/悬浮球/引导提示的 `[data-dsh-style]` + `[data-dsh-font]` 实时同步。
+- **UI v3 Upgrade**: add 13 curated light presets (including `glass`, `eink`, `blueprint`, `risograph`, `win98`, `songhui`, `frutiger`, and `gazette`) and 8 independent dual-layer Chinese + Latin font pairings (defaulting to `arcade` YouYuan Mono alongside `auto`, `songkai`, `fangsong`, `poster`, `retro98`, `serif`, and `modern`).
+- Streamline the 48px single-row workbench header (compact layout pills and shortcut trigger), sliding tab indicator, resizable schedule rail, theme-tinted shimmer skeletons, agenda row hover quick actions, `[data-dsh-serif]` headings, and live `[data-dsh-style]` + `[data-dsh-font]` syncing across dialogs, launcher, and CoachmarkTour.
+
+## 0.18.7 (2026-11-18)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.5`：独立安装插件详情页底栏去重（保留组合包组件委派与对话页热更新卡片），补齐 `bundle-in-use` 组合包占用提示说明，并在检查结果过期或远端版本变更时自动刷新元数据，彻底消除 `check-first` 卡顿。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.5`: deduplicate standalone native plugin detail footers while keeping Suite delegation and in-chat reminder cards, surface clear `bundle-in-use` guidance, and automatically refresh expired update checks without `check-first` stalls.
+
+## 0.18.6 (2026-11-18)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.4`：对话页新增一键热更新提醒卡片，自动检查周期缩短至 6 小时，手动热更新后可顺手开启包含兼容功能小版本的空闲自动更新。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.4`: add an actionable in-chat hot-update reminder card, 6-hour background update checks, compatible minor+patch idle auto-updates, and a post-update opt-in prompt.
+
+## 0.18.5 (2026-11-18)
+
+- **交互式聚光灯 + 自动转向箭头分步引导（Coachmark Tour）**：顶栏新增 `? 引导` 按钮，首次进入工作台温和引导一次（跳过或完成后写入 `localStorage` 永久不再打扰），支持真实按钮聚光灯高亮、视口边缘自动翻转小箭头、键盘 `←`/`→`/`Esc` 导航与气泡内一键复制对话指令；移除占高度的静态折叠流程说明框。
+- **Interactive Spotlight + Directional Arrow Coachmark Tour**: add a header **? Tour** trigger with one-time non-intrusive first-visit onboarding (`localStorage` persisted), live target spotlighting, auto-flipping directional arrows, keyboard `←`/`→`/`Esc` navigation, and inline 1-click prompt copy, replacing the static collapsible workflow box.
+
+## 0.18.4 (2026-11-18)
+
+- 同步 `@stardustlc/dsh-updates` 0.2.3：侧边栏工作台平时默认隐藏底部更新栏（零高度占用），仅在检测到兼容新版本或执行更新时浮现单行精简提示条；完整更新设置与检查入口统一保留在 DSH「插件」详情页底部。
+- Sync `@stardustlc/dsh-updates` 0.2.3: keep the sidebar workbench update footer hidden by default when up-to-date, surfacing a single-line compact strip only for actionable updates or active jobs while retaining full controls in native Plugin Details.
+
+## 0.18.3 (2026-11-18)
+
+- 空闲时段面板新增「复制空闲时段文案」按钮，一键生成带日期星期、起止时间与时区的候选约会文本供直接粘贴发送；补充可折叠三步日程工作流、一键复制指令与无障碍标签关联。
+- Add 1-click **Copy free slots summary** in Availability for instant sharing in chat or email, alongside a collapsible 3-step schedule workflow guide, copyable prompt chips, and explicit form label associations.
 
 ## 0.18.2 (2026-11-18)
 

@@ -14,9 +14,9 @@ Update the plugin, restart DSH and open its native sidebar panel (or More if it 
 
 The UI follows the host language and theme and shows event text as entered. The schedule sidebar contains the mini calendar, visibility for the connected CalDAV calendar, conflicts, and plugin updates. In narrow windows the sidebar moves above the calendar and the week grid scrolls horizontally. Deleting an event requires confirmation.
 
-顶部提供 DSH 原生、Arc 浮岛、Raycast 聚光和 Bento 卡片四种布局，以及原稿的蓝、紫、橙、绿四套配色。配色随宿主深浅色切换，仅应用于日历工作台。拖动侧栏分隔条或聚焦后按左右键调整宽度。浏览器会记住布局、配色和侧栏宽度。焦点在工作台内时，`Ctrl/⌘ + Shift + K` 打开可搜索的快捷操作，`W`、`M`、`A` 切换周、月、议程，`N` 新建，`F` 查找空闲。
+顶部默认启用 **Bento** 卡片工作室布局，并可在 DSH 原生、Arc 浮岛、Raycast 聚光和 Bento 卡片四种布局间一键切换；日历画布上方常驻紧凑的**今日聚焦条**（今日日期徽章、下一场日程倒计时、无冲突/冲突指示与 `+ 快速新建` 胶囊）。顶栏内置 13 套设计风格、4 套事件配色、8 套字体搭配（默认幼圆等宽）与 4 步交互式「? 引导」导览。拖动侧栏分隔条或聚焦后按左右键调整宽度。浏览器会记住布局、风格、配色和侧栏宽度。焦点在工作台内时，`Ctrl/⌘ + Shift + K` 打开可搜索的快捷操作，`W`、`M`、`A` 切换周、月、议程，`N` 新建，`F` 查找空闲。
 
-The header offers DSH Native, Arc Floating, Raycast Spotlight, and Bento Cards, with the reference's blue, purple, orange, and green palettes. The palette follows the host color mode and applies to the calendar workbench. Drag the sidebar separator or focus it and use the arrow keys to resize. The browser remembers the layout, palette, and width. With focus inside the workbench, `Ctrl/⌘ + Shift + K` opens searchable actions, `W`, `M`, and `A` switch views, `N` creates a draft, and `F` finds free time.
+The header defaults to the tactile **Bento** card studio layout while keeping one-click switching across DSH Native, Arc Floating, Raycast Spotlight, and Bento Cards, paired with a compact **Today Focus Ribbon** above the calendar canvas (today's date badge, next-event countdown, conflict indicator, and `+ Quick event` pill). The topbar also offers 13 visual styles, 4 event palettes, 8 font pairings (`Rounded Mono` default), and a 4-step interactive `? Tour`. Drag the sidebar separator or focus it and use the arrow keys to resize. The browser remembers the layout, style, palette, and width. With focus inside the workbench, `Ctrl/⌘ + Shift + K` opens searchable actions, `W`, `M`, and `A` switch views, `N` creates a draft, and `F` finds free time.
 
 ## 源码 / Source
 
@@ -26,7 +26,7 @@ The workbench sources live in `templates/client.js`, `templates/panels/`, and `t
 
 ## 验收范围 / Validation boundary
 
-2026-10-25：Windows、官方 DSH 0.2.1-rc.3 Web，后台 Chrome/Playwright 实际点击和输入；覆盖中英文、浅深色、1536px 与 390px、状态读回与控制台。Browser plugin 不可用，因此使用本地 Playwright。
+当前版本要求宿主 DSH `>=0.2.2-rc.3`。工作台顶栏内置「? 引导」聚光灯交互导览与一键复制的对话指令。历史回归记录（早期 `>=0.2.2-rc.3` 升级前基线）：Windows 后台 Chrome/Playwright 实际点击和输入；覆盖中英文、浅深色、1536px 与 390px、状态读回与控制台。Browser plugin 不可用，因此使用本地 Playwright。
 
 邮件使用受控 AgentMail HTTP 服务，日历使用受控 CalDAV 协议传输；插件处理器、存储、校验和原生宿主均实际运行。未使用真实邮箱、真实日历账号或付费模型。RSS 访问 Node.js 官方公开来源。PPT 实际生成并渲染 PPTX、下载 ZIP；两个视频插件实际运行官方引擎并播放 MP4。
 

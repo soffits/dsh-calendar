@@ -5,7 +5,6 @@ function EventForm({ draft, events, onCancel, onSubmit, busy, error, source, ori
     const [smartBusy, setSmartBusy] = useState(false);
     const [smartFilled, setSmartFilled] = useState(false);
     // Update protection: dsh-calendar.event
-    __stardustUpdatesGuard(React, "dsh-calendar.event", { dirty: JSON.stringify(form) !== JSON.stringify(draft), busy: !!busy });
 
     useEffect(() => { setForm(draft); }, [draft]);
     const patch = fields => setForm(previous => ({ ...previous, ...fields }));

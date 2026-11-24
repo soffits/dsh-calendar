@@ -3,7 +3,7 @@
  *
  * 与 dsh-email 的设置路由同一套安全模型，理由也一样：这个路由能读用户的
  * 全部日程、还能替用户改/删日程，而宿主 webserver 有可能绑定在 0.0.0.0。
- * 四道门缺一不可 ——
+ * 旧 loopback 兼容路由的四道门缺一不可（新的 /api 路由由宿主认证管线承载）——
  *   1. remoteAddress 必须是回环地址（局域网不可达）；
  *   2. Host 头必须是 localhost 名（挡 DNS rebinding：恶意域名解析到 127.0.0.1）；
  *   3. 写操作要求 application/json（跨源页面无法用简单请求绕过预检）+
@@ -13,23 +13,18 @@
  * 面板要的是「事件列表 + 增删改」，所以这一层不做自己的状态：每次请求都问
  * CalDAV 服务器要，服务器就是唯一真相。缓存的只有 service 实例（token 复用）。
  */
-import { resolveConfig, type CalendarConfig } from './config.js'
+import { passwordFromFile, resolveConfig, type CalendarConfig } from './config.js'
 import { CalendarSettingsSchema, SETTINGS_NAMESPACE, draftToConfig, validateSettingsValue, type CalendarSettingsValue } from './settings.js'
-import { CalendarService } from './caldav.js'
+import { createConnectionService, connectionCollections } from './connections.js'
 import { discoverICloud } from './icloud.js'
 import { asRecord, assertIsoTime, assertTimeRange, isoNoMillis, optionalString, sortEvents } from './tools.js'
 import type { CalendarEvent } from './ical.js'
 import type { AvailabilityInput, AvailabilityResult } from './availability.js'
 import { DRAFT_BODY_LIMIT, type DraftModel } from './quick-draft.js'
-import { loadPersonConnection, peopleEnabled, personFor, savePersonPreference, type PeopleOptions, type PersonConnection, type RequestIdentityLike } from './people.js'
-import { createMultiService } from './multi.js'
 
 /** 面板与浏览器说话的同源路由。 */
 export const SETTINGS_ROUTE = '/_dsh/dsh-calendar/settings'
 export const DRAFT_ROUTE = '/_dsh/dsh-calendar/draft'
-/** The routes the browser really calls: they go through DSH's own request pipeline, so its sign-in covers them. */
-export const SETTINGS_API_ROUTE = '/api/dsh-calendar/settings'
-export const DRAFT_API_ROUTE = '/api/dsh-calendar/draft'
 
 /** 回环主机名白名单；带端口会被拆掉，IPv6 字面量保留方括号。 */
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
@@ -56,34 +51,14 @@ export function postVerdict(headers: Record<string, unknown>): { status: number;
     } catch {
       url = undefined
     }
-    if (url !== undefined && (url.protocol === 'http:' || url.protocol === 'https:')
-      && !LOCAL_HOSTNAMES.has(url.hostname.toLowerCase())) {
+    if (url === undefined || !['http:', 'https:'].includes(url.protocol)
+      || !LOCAL_HOSTNAMES.has(url.hostname.toLowerCase())) {
       return { status: 403, message: `origin "${origin}" is not allowed to write dsh-calendar events` }
     }
   }
   const site = headers['sec-fetch-site']
   if (typeof site === 'string' && site !== '' && site !== 'same-origin' && site !== 'none') {
     return { status: 403, message: `a ${site} request may not write dsh-calendar events` }
-  }
-  return undefined
-}
-
-/**
- * Gate for a request that arrived through DSH's request pipeline (sign-in already checked there):
- * JSON only, and a browser-sent Origin or Sec-Fetch-Site must say same-origin. Unlike the
- * loopback-only route this works behind a reverse proxy.
- */
-export function fetchVerdict(request: Request): { status: number; message: string } | undefined {
-  if (!(request.headers.get('content-type') ?? '').toLowerCase().includes('application/json')) {
-    return { status: 415, message: 'dsh-calendar accepts application/json only' }
-  }
-  const site = request.headers.get('sec-fetch-site')
-  if (site && site !== 'same-origin' && site !== 'none') return { status: 403, message: `a ${site} request may not use dsh-calendar` }
-  const origin = request.headers.get('origin')
-  if (origin) {
-    try {
-      if (new URL(origin).host !== (request.headers.get('host') || new URL(request.url).host)) return { status: 403, message: 'cross-origin request refused' }
-    } catch { return { status: 403, message: 'invalid origin' } }
   }
   return undefined
 }
@@ -186,16 +161,6 @@ export interface CalendarSettingsBackendOptions {
   probeFactory?: (config: CalendarConfig) => Promise<{ count: number; sample: string[] }>
   env?: NodeJS.ProcessEnv
   draftModel?: () => DraftModel | undefined
-  /** Several people share this DSH: who is who, and where each person's connection file lives. */
-  people?: PeopleOptions
-  /** The `requestIdentity` service right now, if a sign-in plugin provides one. */
-  identity?: () => RequestIdentityLike | undefined
-  /** Set on a per-person backend: its calendars and whether it may write. */
-  scope?: { person: string; calendars: string[]; readOnly: boolean; floatingButton?: boolean }
-  /** Per-person backend: where a preference is kept. */
-  savePreference?: (key: 'floatingButton', value: boolean) => Promise<void>
-  /** The row's `floatingButton`, the default for everyone who has not chosen. */
-  floatingButton?: () => boolean | undefined
   settings?: CalendarSettingsFace
   /** 宿主 ctx：用来懒接入 settings 服务（不赌子 fiber 的时序）。 */
   ctx?: any
@@ -210,6 +175,10 @@ export interface CalendarSettingsBackendOptions {
    * 0.1.7 起是 entry id（默认 `calendar`）—— 懒接入这条退路要靠它才认得出自己那一行。
    */
   settingsNs?: string
+  /** The row's `floatingButton`: the default for everyone who has not chosen. */
+  floatingButton?: () => boolean | undefined
+  /** A person's own backend: their display preferences are kept in their connection file. */
+  preferences?: boolean
 }
 
 /** 把「已存值 + 草稿」合并成要落盘的一版：草稿里缺席的键保留原值。 */
@@ -295,10 +264,12 @@ export class CalendarSettingsBackend {
   private service(): CalendarServiceLike {
     const current = this.configOf()
     if (this.options.serviceFactory !== undefined) return this.options.serviceFactory(current)
-    const resolved = resolveConfig(current, this.options.env ?? process.env)
-    const key = JSON.stringify(resolved)
+    const env = current.perUser ? {} : this.options.env ?? process.env
+    const rows = connectionCollections(current)
+    const resolved = (rows.length ? rows.map(row => row.url) : [current.caldavUrl]).map(caldavUrl => resolveConfig({ ...current, ...(caldavUrl ? { caldavUrl } : {}) }, env))
+    const key = JSON.stringify({ current, resolved })
     if (this.cachedService === undefined || this.cachedKey !== key) {
-      this.cachedService = new CalendarService(resolved) as unknown as CalendarServiceLike
+      this.cachedService = createConnectionService(current, env) as unknown as CalendarServiceLike
       this.cachedKey = key
     }
     return this.cachedService
@@ -314,8 +285,13 @@ export class CalendarSettingsBackend {
     const descriptor = this.settings?.descriptor?.()
     let configured = false
     let reason: string | undefined
+    let collections: ReturnType<typeof connectionCollections> = []
     try {
-      resolveConfig(effective, this.options.env ?? process.env)
+      const rows = connectionCollections(effective)
+      collections = rows
+      for (const caldavUrl of rows.length ? rows.map(row => row.url) : [effective.caldavUrl]) {
+        resolveConfig({ ...effective, ...(caldavUrl ? { caldavUrl } : {}) }, effective.perUser ? {} : this.options.env ?? process.env)
+      }
       configured = true
     } catch (error) {
       reason = error instanceof Error ? error.message : String(error)
@@ -326,16 +302,16 @@ export class CalendarSettingsBackend {
       const resolved = (effective as Record<string, unknown>)[key]
       return typeof resolved === 'string' ? resolved : ''
     }
-    const env = this.options.env ?? process.env
+    const env = effective.perUser ? {} : this.options.env ?? process.env
     const hasCredential = (key: string, envKey: string): boolean =>
       text(key).trim() !== '' || (typeof env[envKey] === 'string' && env[envKey]!.trim() !== '')
     return {
       configured,
       ...(reason !== undefined ? { reason } : {}),
-      ...(this.options.scope !== undefined ? { person: this.options.scope.person, calendars: this.options.scope.calendars } : {}),
-      readOnly: this.options.scope?.readOnly === true,
-      floatingButton: this.options.scope?.floatingButton ?? this.options.floatingButton?.() !== false,
-      floatingButtonEditable: this.options.savePreference !== undefined,
+      readOnly: effective.readOnly === true,
+      floatingButton: typeof stored.floatingButton === 'boolean' ? stored.floatingButton : this.options.floatingButton?.() !== false,
+      floatingButtonEditable: this.options.preferences === true && this.settings?.replace !== undefined,
+      calendars: collections.map(row => ({ id: row.id, name: row.name ?? row.id, readOnly: !!effective.readOnly || !!row.readOnly })),
       settingsAvailable: this.settings !== undefined,
       ...(this.settings?.kind !== undefined ? { settingsKind: this.settings.kind } : {}),
       ...(this.options.settingsReason !== undefined ? { settingsReason: this.options.settingsReason } : {}),
@@ -351,10 +327,20 @@ export class CalendarSettingsBackend {
       clientId: text('clientId'),
       tokenUrl: text('tokenUrl'),
       proxyUrl: text('proxyUrl'),
-      hasPassword: hasCredential('password', 'DSH_CALENDAR_PASSWORD'),
+      hasPassword: hasCredential('password', 'DSH_CALENDAR_PASSWORD') || passwordFromFile(text('passwordFile')) !== undefined,
       hasClientSecret: hasCredential('clientSecret', 'DSH_CALENDAR_CLIENT_SECRET'),
       hasRefreshToken: hasCredential('refreshToken', 'DSH_CALENDAR_REFRESH_TOKEN'),
     }
+  }
+
+  /** Keep a person's display preference next to their connection, every other key untouched. */
+  private async setPreferences(body: Record<string, unknown>): Promise<unknown> {
+    if (typeof body.floatingButton !== 'boolean') throw new Error('floatingButton must be true or false')
+    const face = this.settings
+    if (this.options.preferences !== true || face?.replace === undefined) throw new Error('This preference is set in the calendar row of the profile (floatingButton).')
+    const stored = (face.read?.() ?? {}) as Record<string, unknown>
+    await face.replace({ ...stored, floatingButton: body.floatingButton }, face.descriptor?.()?.revision ?? 0)
+    return { connection: this.connection() }
   }
 
   /** 兼容旧动作名：status 就是连接摘要。 */
@@ -368,8 +354,15 @@ export class CalendarSettingsBackend {
  */
   private proposed(draft: Record<string, unknown>): { stored: Record<string, unknown>; config: CalendarConfig } {
     const storedValue = ((this.settings?.read?.() ?? {}) as Record<string, unknown>)
-    const stored = mergeConnection(storedValue, draft)
-    return { stored, config: { ...this.configOf(), ...draftToConfig(stored as Partial<CalendarSettingsValue>) } }
+    // Policy/collection metadata is server-owned and never comes from form input.
+    const policy = Object.fromEntries(['readOnly', 'calendars', 'writeCalendar', 'passwordFile', 'floatingButton'].filter(key => Object.hasOwn(storedValue, key)).map(key => [key, storedValue[key]]))
+    const stored = { ...policy, ...mergeConnection(storedValue, draft) }
+    const config = { ...this.configOf(), ...draftToConfig(stored as Partial<CalendarSettingsValue>) }
+    // null is an explicit credential removal. configOf() may still expose the
+    // previous live/profile value until replace() commits, so do not let the
+    // pre-save probe silently reuse a secret the user is clearing.
+    for (const key of CONNECTION_KEYS) if (draft[key] === null) delete (config as Record<string, unknown>)[key]
+    return { stored, config }
   }
 
   /** 真连一次：拿拟议配置列一下未来 30 天，能列出来就算通。 */
@@ -377,7 +370,7 @@ export class CalendarSettingsBackend {
     if (this.options.probeFactory !== undefined) return await this.options.probeFactory(config)
     const service = this.options.serviceFactory !== undefined
       ? this.options.serviceFactory(config)
-      : (new CalendarService(resolveConfig(config, this.options.env ?? process.env)) as unknown as CalendarServiceLike)
+      : (createConnectionService(config, config.perUser ? {} : this.options.env ?? process.env) as unknown as CalendarServiceLike)
     const now = new Date()
     const events = await service.list(isoNoMillis(now.toISOString()), isoNoMillis(new Date(now.getTime() + 30 * 86400000).toISOString()), { expand: false, maxOccurrences: 5 })
     return { count: events.length, sample: events.slice(0, 3).map((event) => event.summary) }
@@ -433,70 +426,33 @@ export class CalendarSettingsBackend {
     } finally { res.off?.('close', disconnect) }
   }
 
-  private scoped = new Map<string, { key: string; backend: CalendarSettingsBackend }>()
-
-  /** The backend that answers this request: this one, or the signed-in person's own. */
-  private async backendFor(): Promise<CalendarSettingsBackend | Response> {
-    const people = this.options.people
-    if (people === undefined || !peopleEnabled(people)) return this
-    const fail = (status: number, message: string) => jsonResponse(status, { ok: false, error: { code: 'forbidden', message } })
-    const service = this.options.identity?.()
-    if (service === undefined) return fail(503, 'dsh-calendar needs a sign-in plugin that provides requestIdentity, and none is running.')
-    const identity = service.current()
-    if (identity === null) return fail(401, 'Not signed in.')
-    const person = await personFor(people, identity.id, (message) => console.warn(message))
-    if (person === undefined) return fail(403, 'You have no calendar here.')
-    let connection: PersonConnection | undefined
-    try { connection = people.connectionsDir ? await loadPersonConnection(people.connectionsDir, person) : undefined }
-    catch (error) { console.warn(`dsh-calendar: connection file of ${person}: ${(error as Error).message}`) }
-    if (connection === undefined) {
-      return this.scopedBackend(person, { config: {}, calendars: [], readOnly: true }, 'unconfigured')
+  /** Internal authenticated carrier entry; authentication is enforced by transport.ts. */
+  async fetchAuthenticated(request: Request, draft = false): Promise<Response> {
+    const json = (status: number, value: unknown) => Response.json(value,{status,headers:{'cache-control':'no-store'}})
+    if (request.method === 'GET' && !draft) return json(200,{ok:true,value:this.status()})
+    if (request.method !== 'POST') return json(405,{ok:false,message:'Use POST'})
+    if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return json(415,{ok:false,message:'JSON required'})
+    const origin = request.headers.get('origin'), site = request.headers.get('sec-fetch-site'), desktop = origin === 'dsh-app://app'
+    if (site && !['same-origin','none'].includes(site) && !desktop) return json(403,{ok:false,message:'Cross-site request refused'})
+    if (origin && !desktop) {
+      try { const parsed = new URL(origin); if (!['http:','https:'].includes(parsed.protocol) || parsed.host !== (request.headers.get('host') || new URL(request.url).host)) return json(403,{ok:false,message:'Cross-origin request refused'}) }
+      catch { return json(403,{ok:false,message:'Invalid origin'}) }
     }
-    return this.scopedBackend(person, connection, JSON.stringify(connection))
-  }
-
-  private scopedBackend(person: string, connection: PersonConnection, key: string): CalendarSettingsBackend {
-    const known = this.scoped.get(person)
-    if (known !== undefined && known.key === key) return known.backend
-    const service = connection.calendars.length > 0 ? createMultiService(connection, { env: this.options.env ?? {} }) : undefined
-    const backend = new CalendarSettingsBackend({
-      config: connection.config,
-      env: this.options.env ?? {},
-      draftModel: this.options.draftModel,
-      floatingButton: this.options.floatingButton,
-      scope: {
-        person, calendars: connection.calendars.map((calendar) => calendar.name), readOnly: connection.readOnly,
-        floatingButton: connection.floatingButton ?? this.options.floatingButton?.() !== false,
-      },
-      ...(this.options.people?.connectionsDir
-        ? { savePreference: (key: 'floatingButton', value: boolean) => savePersonPreference(this.options.people!.connectionsDir!, person, key, value) }
-        : {}),
-      ...(service !== undefined ? { serviceFactory: () => service } : {}),
-    })
-    this.scoped.set(person, { key, backend })
-    return backend
-  }
-
-  /** Request entry for DSH's own pipeline: identity, same-origin gate, JSON body, action. */
-  async fetch(request: Request, draft = false): Promise<Response> {
-    if (request.method !== 'POST') return jsonResponse(405, { ok: false, error: { code: 'method', message: 'POST only' } })
-    const verdict = fetchVerdict(request)
-    if (verdict !== undefined) return jsonResponse(verdict.status, { ok: false, error: { code: verdict.status === 415 ? 'unsupported-media-type' : 'forbidden', message: verdict.message } })
-    const backend = await this.backendFor()
-    if (backend instanceof Response) return backend
+    const reader = request.body?.getReader()
+    if (!reader) return json(400,{ok:false,message:'Request body required'})
+    let size=0; const chunks: Uint8Array[]=[]
     try {
-      const raw = await request.text()
-      if (raw.length > (draft ? DRAFT_BODY_LIMIT : 256 * 1024)) throw new Error('Request too large.')
-      const body = asRecord(JSON.parse(raw))
-      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
-      const value = draft ? await backend.dispatchDraft(body, signal) : await backend.dispatch(body, signal)
-      return jsonResponse(200, { ok: true, value })
-    } catch (error) {
-      return jsonResponse(400, { ok: false, error: { code: 'rejected', message: error instanceof Error ? error.message : String(error) } })
-    }
+      try { for (;;) { const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>(draft?DRAFT_BODY_LIMIT:256*1024)){await reader.cancel();return json(413,{ok:false,message:'Request too large'})}chunks.push(value) } }
+      finally { reader.releaseLock() }
+      const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      if (!parsed || typeof parsed!=='object' || Array.isArray(parsed)) throw new Error('Request must be an object')
+      const signal=AbortSignal.any([request.signal,AbortSignal.timeout(120000)])
+      const value=draft?await this.dispatchDraft(parsed,signal):await this.dispatch(parsed,signal)
+      return json(200,{ok:true,value})
+    } catch(error) { return json(400,{ok:false,error:{code:'rejected',message:error instanceof Error?error.message:'Calendar request failed'}}) }
   }
 
-  async dispatchDraft(body: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
+  private async dispatchDraft(body: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
     const model = this.options.draftModel?.()
     if (body.action === 'models') return { models: model ? await model.routes(signal) : [] }
     if (body.action !== 'suggest' || !model) throw new Error('请在 DSH 中配置日程解析模型。')
@@ -504,15 +460,11 @@ export class CalendarSettingsBackend {
   }
 
   /** 动作分发。每个动作自己校验参数，错误信息面向用户（中文，面板直接显示）。 */
-  async dispatch(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+  private async dispatch(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
     const action = typeof body.action === 'string' ? body.action : ''
+    if (['create', 'update', 'delete'].includes(action) && this.configOf().readOnly) throw new Error('日历连接为只读 / Calendar connection is read-only')
     if (action === 'status' || action === 'connection') return this.connection()
-    if (action === 'setPreferences') {
-      if (typeof body.floatingButton !== 'boolean') throw new Error('floatingButton must be true or false')
-      if (this.options.savePreference === undefined) throw new Error('This preference is set in the calendar row of the profile (floatingButton).')
-      await this.options.savePreference('floatingButton', body.floatingButton)
-      return { connection: { ...this.connection(), floatingButton: body.floatingButton } }
-    }
+    if (action === 'setPreferences') return await this.setPreferences(body)
     if (action === 'discoverICloud') {
       const draft = connectionDraft(body)
       const current = this.configOf()
@@ -584,10 +536,6 @@ export class CalendarSettingsBackend {
 }
 
 /** POST body 读取：上限 256 KiB，超限或非 JSON 直接拒绝。 */
-function jsonResponse(status: number, payload: unknown): Response {
-  return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })
-}
-
 async function readJsonBody(req: any, limit = 256 * 1024): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
@@ -660,19 +608,50 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
  * 把设置页里的日历面板挂到宿主 webserver 上。
  * 与 dsh-email 相同：ctx.inject(['webServer']) + effect 注册，插件卸载即摘掉路由。
  */
+function legacyAuthResponse(res: any, status: 401 | 403, message: string): void {
+  if (typeof res.writeHead === 'function') res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+  if (typeof res.end === 'function') res.end(JSON.stringify({ ok: false, error: { code: 'forbidden', message } }))
+}
+
+/**
+ * 把设置页里的日历面板挂到宿主 webserver 上。
+ * 与 dsh-email 相同：ctx.inject(['webServer']) + effect 注册，插件卸载即摘掉路由。
+ */
 export function installCalendarSettingsWeb(ctx: any, backend: CalendarSettingsBackend): void {
-  ctx.inject(['webServer'], (webCtx: any) => {
+  ctx.inject?.(['webServer', 'connection'], (webCtx: any) => {
     webCtx.effect(() => {
+      const rejectUnauthenticated = (req: any, res: any): boolean => {
+        const connection = webCtx.connection
+        if (typeof connection?.requestRejection !== 'function') {
+          legacyAuthResponse(res, 403, 'dsh-calendar connection authentication is unavailable')
+          return true
+        }
+        let rejection: 401 | 403 | undefined
+        try { rejection = connection.requestRejection({ headers: req.headers ?? {} }) }
+        catch {
+          legacyAuthResponse(res, 403, 'dsh-calendar request authentication failed')
+          return true
+        }
+        if (rejection !== undefined) {
+          legacyAuthResponse(res, rejection === 401 ? 401 : rejection === 403 ? 403 : 403, 'dsh-calendar request authentication required')
+          return true
+        }
+        return false
+      }
+      const handler = (draft: boolean) => (req: any, res: any): Promise<void> | void => {
+        if (rejectUnauthenticated(req, res)) return
+        return backend.handle(req, res, draft)
+      }
       const unmount = webCtx.webServer.register({
         kind: 'exact',
         path: SETTINGS_ROUTE,
-        handler: (req: any, res: any) => backend.handle(req, res),
+        handler: handler(false),
       })
       try {
         const unmountDraft = webCtx.webServer.register({
           kind: 'exact',
           path: DRAFT_ROUTE,
-          handler: (req: any, res: any) => backend.handle(req, res, true),
+          handler: handler(true),
         })
         return () => { unmountDraft(); unmount() }
       } catch (error) {
@@ -681,16 +660,4 @@ export function installCalendarSettingsWeb(ctx: any, backend: CalendarSettingsBa
       }
     }, 'dsh-calendar: web routes')
   })
-}
-
-/**
- * Mount the panel's routes on DSH's own request pipeline (`connection.fetch`), the way the import
- * route is mounted. DSH's sign-in applies to them and a sign-in plugin's `requestIdentity` can see
- * who asks, so they work behind a reverse proxy and can tell people apart.
- */
-export function installCalendarFetchRoutes(ctx: any, backend: CalendarSettingsBackend): void {
-  const fetchRoutes = ctx.connection?.fetch
-  if (typeof fetchRoutes?.register !== 'function') return
-  fetchRoutes.register({ path: SETTINGS_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
-  fetchRoutes.register({ path: DRAFT_API_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request, true) })
 }

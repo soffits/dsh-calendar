@@ -2,9 +2,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, buildCalendarTools } from '../lib/index.js'
 
-/** 构造一个收集工具注册的假 ctx。 */
+/** 构造一个收集工具注册与 dispose 监听的假 ctx。 */
 function makeFakeCtx() {
   const registered = []
+  const listeners = {}
   const ctx = {
     tools: {
       register(definition) {
@@ -15,10 +16,12 @@ function makeFakeCtx() {
         }
       },
     },
-    on() { return () => {} },
-    effect(execute) { execute() },
+    on(event, listener) {
+      (listeners[event] ??= []).push(listener)
+      return () => {}
+    },
   }
-  return { ctx, registered }
+  return { ctx, registered, listeners }
 }
 
 test('apply 注册 7 个工具且名字正确', () => {
@@ -73,29 +76,12 @@ test('apply 在配置缺失时不抛，仅注册工具', () => {
   assert.equal(registered.length, 7)
 })
 
-test('Cordis 4 没有 dispose 事件：不注册 dispose 监听，卸载只走 effect', () => {
-  const heard = []
-  const unloaders = []
-  const registered = []
-  const ctx = {
-    tools: {
-      register(definition) {
-        registered.push(definition)
-        return () => registered.splice(registered.indexOf(definition), 1)
-      },
-    },
-    on(event) { heard.push(event); return () => {} },
-    effect(execute) { unloaders.push(execute()) },
-    inject(services, callback) {
-      if (services[0] === 'llm' || services[0] === 'attachments') {
-        callback({ [services[0]]: {}, effect(execute) { unloaders.push(execute()) }, on(event) { heard.push(event); return () => {} } })
-      }
-    },
-  }
+test('dispose 触发时卸载全部工具', () => {
+  const { ctx, registered, listeners } = makeFakeCtx()
   apply(ctx, { provider: 'custom', username: 'u', password: 'p', caldavUrl: 'https://x/' })
   assert.equal(registered.length, 7)
-  assert.ok(!heard.includes('dispose'), 'a dispose listener never runs on Cordis 4')
-  for (const unload of unloaders.reverse()) unload()
+  assert.ok(listeners.dispose, '应注册 dispose 监听')
+  for (const listener of listeners.dispose) listener()
   assert.equal(registered.length, 0)
 })
 

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { resolveConfig, type CalendarConfig, type ResolvedConfig } from './config.js'
 import { CalendarService } from './caldav.js'
+import { writableCollection } from './connections.js'
 import { parseImportICS, importTimezones, type ImportItem } from './import-ical.js'
 import type { CalendarEvent } from './ical.js'
 
@@ -25,7 +26,10 @@ export class CalendarImportBackend {
   private committing = false
   constructor(private readonly options: Options) {}
   private now(): number { return this.options.now?.() ?? Date.now() }
-  private current(): ResolvedConfig { return resolveConfig(this.options.config(), this.options.env ?? process.env) }
+  private current(): ResolvedConfig {
+    const config=this.options.config(), row=writableCollection(config)
+    return resolveConfig({...config,...(row?{caldavUrl:row.url}:{})},config.perUser?{}:this.options.env??process.env)
+  }
   private service(config: ResolvedConfig): ImportService { return this.options.serviceFactory?.(config) ?? new CalendarService(config) }
   private prune(): void { for (const [id, plan] of this.plans) if (this.now() - plan.created > 15 * 60 * 1000) this.plans.delete(id) }
   private safeMessage(error: unknown): string {
@@ -91,9 +95,9 @@ export class CalendarImportBackend {
   async fetch(request: Request): Promise<Response> {
     if (request.method !== 'POST') return fail(405, '请使用 POST')
     if (request.headers.get('x-dsh-calendar-import') !== '1' || request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return fail(403, '请从日历导入面板操作')
-    const site = request.headers.get('sec-fetch-site'), origin = request.headers.get('origin')
-    if (site && !['same-origin', 'none'].includes(site)) return fail(403, '拒绝跨站操作')
-    if (origin) {
+    const site = request.headers.get('sec-fetch-site'), origin = request.headers.get('origin'), desktop = origin === 'dsh-app://app'
+    if (site && !['same-origin', 'none'].includes(site) && !desktop) return fail(403, '拒绝跨站操作')
+    if (origin && !desktop) {
       try { const url = new URL(origin); if (!['http:', 'https:'].includes(url.protocol) || url.host !== (request.headers.get('host') || new URL(request.url).host)) return fail(403, '拒绝跨源操作') } catch { return fail(403, '无效来源') }
     }
     try {
@@ -108,5 +112,5 @@ export class CalendarImportBackend {
   }
 }
 export function installCalendarImport(ctx: any, backend: CalendarImportBackend): void {
-  ctx.connection?.fetch?.register?.({ path: CALENDAR_IMPORT_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
+  ctx.inject?.(['connection'], (host: any) => host.connection?.fetch?.register({ path: CALENDAR_IMPORT_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) }))
 }

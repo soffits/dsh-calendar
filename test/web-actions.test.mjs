@@ -9,9 +9,10 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict';
-import { CalendarSettingsBackend, SETTINGS_API_ROUTE, SETTINGS_ROUTE, hostVerdict, mergeConnection, postVerdict } from '../lib/web.js';
+import { CalendarSettingsBackend, SETTINGS_ROUTE, hostVerdict, mergeConnection, postVerdict } from '../lib/web.js';
 import { toCalendarConfig, toSettingsBase, validateSettingsValue } from '../lib/settings.js';
 import { attachSettings } from '../lib/index.js';
+import { readConnectionFile, writeConnectionFile } from '../lib/store.js';
 
 test('iCloud discovery rejects a stored password from another account without contacting the network', async t => {
   let requested = false;
@@ -216,7 +217,7 @@ test('参数不合法时给出可读的中文错误，且不去打扰 CalDAV 服
 });
 
 test('路由常量与面板一致（改一处忘另一处会被这条抓住）', async () => {
-  assert.equal(SETTINGS_API_ROUTE, '/api/dsh-calendar/settings');
+  assert.equal(SETTINGS_ROUTE, '/_dsh/dsh-calendar/settings');
   const source = await import('node:fs').then((fs) => fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8'));
   assert.match(source, /"api\/dsh-calendar\/settings"/, '面板通过文档 base URI 访问同一路由，兼容反向代理子路径');
 });
@@ -365,7 +366,42 @@ test('保存时留空密钥＝沿用已存的那一份（面板不用把密码�
   assert.equal(settings.state.writes[0].value.caldavUrl, 'https://new.example/dav/');
 });
 
-test('连接测试失败 → 不落盘，并把服务器原话带回面板', async () => {
+test('clearing a stored password probes without the old secret, then can save explicitly untested', async () => {
+  const settings = fakeSettings({
+    provider: 'custom',
+    caldavUrl: 'https://old.example/dav/',
+    username: 'me',
+    password: 'fixture-old-password',
+  });
+  const probes = [];
+  const backend = new CalendarSettingsBackend({
+    // Mirrors the per-person/owner integration: settings are reflected in configOf.
+    config: () => settings.read(),
+    settings,
+    probeFactory: async config => {
+      probes.push({ ...config });
+      if (!config.password) throw new Error('Password missing in probe configuration');
+      return { count: 0, sample: [] };
+    },
+  });
+  const failed = makeRes();
+  await backend.handle(makeReq({ body: {
+    action: 'saveConnection', provider: 'custom', caldavUrl: 'https://old.example/dav/', username: 'me', password: null,
+  } }), failed);
+  assert.equal(failed.state.status, 400, 'the default probe must fail rather than test with the credential being cleared');
+  assert.equal(settings.state.writes.length, 0, 'failed probe must not save');
+  assert.equal('password' in probes[0], false, 'the probe must not inherit the old secret from configOf');
+
+  const untested = makeRes();
+  await backend.handle(makeReq({ body: {
+    action: 'saveConnection', provider: 'custom', caldavUrl: 'https://old.example/dav/', username: 'me', password: null, test: false,
+  } }), untested);
+  assert.equal(untested.state.status, 200);
+  assert.equal('password' in settings.state.writes[0].value, false, 'explicit null clears the saved credential');
+  assert.equal('password' in settings.read(), false);
+});
+
+ test('连接测试失败 → 不落盘，并把服务器原话带回面板', async () => {
   const settings = fakeSettings({ provider: 'custom', caldavUrl: 'https://old.example/dav/', username: 'me', password: 'p' });
   const backend = new CalendarSettingsBackend({
     config: {},
@@ -582,25 +618,76 @@ test('attachSettings：注册抛错（已被注册）时不炸，改为搭既有
   }
 });
 
-// ───────────────────────────── 没有宿主 settings 时：只读，不另存一份 ─────────────────────────────
+// ───────────────────────────── 兜底存储（宿主 settings 不可用时） ─────────────────────────────
 
-test('attachSettings：拿不到 settings 服务，或注册失败且没人注册过 → 没有读写面（面板只读，不另存一份连接）', async () => {
+test('兜底文件：读写往返、坏文件当空、revision 递增、目录自动建', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-calendar-store-'));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const file = join(home, 'data', 'dsh-calendar', 'connection.json');
+  assert.deepEqual(readConnectionFile(file), { revision: 0, value: {} }, '不存在就是空配置');
+  writeConnectionFile({ revision: 1, value: { provider: 'google', refreshToken: 'rt' } }, file);
+  assert.deepEqual(readConnectionFile(file), { revision: 1, value: { provider: 'google', refreshToken: 'rt' } });
+  writeFileSync(file, '{ not json');
+  assert.deepEqual(readConnectionFile(file), { revision: 0, value: {} }, '坏文件不能把面板拖垮');
+  writeFileSync(file, JSON.stringify({ revision: 'x', value: [] }));
+  assert.deepEqual(readConnectionFile(file), { revision: 0, value: {} }, '形状不对也当空');
+});
+
+test('attachSettings：拿不到 settings 服务时退到兜底文件（面板照常能保存）', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-calendar-fallback-'));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const originalHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => { warnings.push(args.join(' ')); };
+  try {
+    const attached = attachSettings({ get: () => undefined }, {});
+    assert.equal(attached.face.kind, 'file');
+    assert.match(attached.reason, /未注入宿主 settings 服务/);
+    assert.match(warnings[0], /连接配置改存插件自己的文件/);
+    // 走一次完整保存：应该落到文件里，并能在下一次读回来
+    const backend = new CalendarSettingsBackend({
+      config: {},
+      settings: attached.face,
+      probeFactory: async () => ({ count: 0, sample: [] }),
+    });
+    const saved = makeRes();
+    await backend.handle(makeReq({ body: { action: 'saveConnection', provider: 'custom', caldavUrl: 'https://x.example/dav/', username: 'me', password: 'p' } }), saved);
+    assert.equal(saved.state.status, 200, JSON.stringify(saved.state.body));
+    assert.equal(saved.state.body.value.connection.settingsKind, 'file');
+    const stored = readConnectionFile(join(home, 'data', 'dsh-calendar', 'connection.json'));
+    assert.equal(stored.value.username, 'me');
+    assert.equal(stored.value.caldavUrl, 'https://x.example/dav/');
+    assert.equal(stored.revision, 1, 'revision 递增，下一次写入据此');
+    // 读回来能直接当配置用
+    const again = attachSettings({ get: () => undefined }, {});
+    assert.equal(again.face.read().username, 'me');
+  } finally {
+    console.warn = originalWarn;
+    if (originalHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = originalHome;
+  }
+});
+
+test('attachSettings：注册失败且没人注册过 → 也退到兜底文件（不再写进一个不存在的命名空间）', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-calendar-regfail-'));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const originalHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
   const originalWarn = console.warn;
   console.warn = () => {};
   try {
-    const none = attachSettings({ get: () => undefined }, {});
-    assert.equal(none.face, undefined);
-    assert.match(none.reason, /未注入宿主 settings 服务/);
     const provider = {
       register() { throw new Error('schema rejected') },
       describe() { return [] },
       async replace() { throw new Error('settings namespace "dsh-calendar" is not registered') },
     };
-    const failed = attachSettings({ get: () => provider }, {});
-    assert.equal(failed.face, undefined, '注册失败 + 没人注册 = 不能往那儿写');
-    assert.match(failed.reason, /settings 命名空间注册失败/);
+    const attached = attachSettings({ get: () => provider }, {});
+    assert.equal(attached.face.kind, 'file', '注册失败 + 没人注册 = 不能往那儿写');
+    assert.match(attached.reason, /settings 命名空间注册失败/);
   } finally {
     console.warn = originalWarn;
+    if (originalHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = originalHome;
   }
 });
 
@@ -630,5 +717,5 @@ test('面板体验三件套：记住视图 / 周视图从 07:00 起 / 窄容器�
   assert.match(source, /h\("div", \{ className: "dshc-week", ref: scroller \}/, '滚动容器挂了 ref');
   // ③ 窄容器
   assert.match(source, /container-type:inline-size/, '面板自身是容器查询的容器');
-  assert.match(source, /@container \(max-width: 620px\)\{\.dsh-calendar_miniCalendar\{display:none\}\.dshc-title\{display:none\}\.dshc-chip \.t\{display:none\}/, '窄容器里藏掉时间前缀与重复标题');
+  assert.match(source, /@container \(max-width: 620px\)\{\.dshc-title\{display:none\}\.dshc-chip \.t\{display:none\}/, '窄容器里藏掉时间前缀与重复标题');
 });

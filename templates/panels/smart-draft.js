@@ -1,4 +1,4 @@
-const DSH_CALENDAR_DRAFT_ROUTE = "/api/dsh-calendar/draft";
+const DSH_CALENDAR_DRAFT_ROUTE = "api/dsh-calendar/draft";
 const DSH_CALENDAR_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 function draftImageData(file) {
@@ -20,7 +20,6 @@ function CalendarDraftInput({ onFill, onBusy }) {
     const [busy, setBusy] = useState(false);
     const request = useRef(null);
     const fileInput = useRef(null);
-    __stardustUpdatesGuard(React, "dsh-calendar.smart-draft", { dirty: !!input.trim() || !!file, busy });
 
     useEffect(() => {
         const controller = new AbortController();

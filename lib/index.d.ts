@@ -1,8 +1,8 @@
 /**
  * dsh-calendar —— CalDAV 日历工具插件（node 半身，配置走 cordis.patch.yml）。
  *
- * 插件导出 apply(ctx, config)：把五个面向模型的工具（calendar_list / calendar_create /
- * calendar_update / calendar_delete / calendar_search）注册进宿主进程的工具注册表。
+ * 插件导出 apply(ctx, config)：把七个面向模型的工具（calendar_list / calendar_create /
+ * calendar_update / calendar_delete / calendar_search / calendar_health / calendar_find_time）注册进宿主进程的工具注册表。
  * 配置缺失时插件照常加载，工具在 execute 时才抛出带中文指引的错误。
  *
  * @module dsh-calendar
@@ -47,8 +47,10 @@ export interface CalendarPluginContext {
  * 在请求处理里注册会失败，而失败一旦被吞掉，就会在保存时才暴露成「namespace is not registered」。
  * 拿不到服务 / 注册失败都只 warn：面板退化为只读，配置仍可写在 cordis.patch.yml。
  */
+/** 兜底：把连接配置存进插件自己的文件（宿主 settings 不可用/注册失败时）。 */
+export declare function fileSettingsFace(file?: string): CalendarSettingsFace;
 /**
- * 接上配置存储：0.1.7 的宿主表单 → 老宿主的 settings 命名空间 → 没有读写面（面板只读）。
+ * 接上配置存储：0.1.7 的宿主表单 → 老宿主的 settings 命名空间 → 插件自己的兜底文件。
  *
  * 三代宿主三条路，每一条失败都往下退而不是抛：
  *   1. **0.1.7 起**：设置项就是 entry 的 Config（`.volatile()` 字段），宿主自己投影成表单，
@@ -62,12 +64,12 @@ export interface CalendarPluginContext {
  * @returns 读写面、它在 describe() 里的 ns，以及退化原因（没退化就没有）。
  */
 export declare function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig): {
-    face: CalendarSettingsFace | undefined;
+    face: CalendarSettingsFace;
     reason?: string;
     ns: string;
 };
 /**
- * 插件入口：惰性解析配置并注册五个日历工具。
+ * 插件入口：惰性解析配置并注册七个日历工具。
  * @param ctx - 宿主上下文（至少含 tools.register）。
  * @param config - 插件配置（可缺省）。
  */
@@ -79,7 +81,11 @@ export * from './caldav.js';
 export * from './tools.js';
 export * from './web.js';
 export * from './settings.js';
+export * from './store.js';
 export * from './host-settings.js';
 export * from './import-ical.js';
 export * from './import-web.js';
+export * from './connections.js';
+export * from './people.js';
+export * from './transport.js';
 export { liveConfig } from './host-config.js';

@@ -2,7 +2,7 @@
 
 # dsh-calendar
 
-[中文](../README.md)
+[中文](./REFERENCE.zh.md)
 
 ![dsh-calendar whale girl plugin cover](https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/assets/cover-whale-girl.png)
 
@@ -36,18 +36,42 @@ dsh plugin --profile desktop add dsh-calendar
 
 For the web version, replace `desktop` with `web`. Restart DSH after installation.
 
-## Start using it
+## Start using it: Three-step workflow
 
-1. Open Calendar in the sidebar; choose a provider in connection settings and enter your account credentials.
-2. Test the connection, select a calendar and verify its time zone before using month, week or agenda views.
-3. Before creating or editing an event, check its date, time and destination calendar, then confirm.
-4. Preview and select ICS entries before importing; review skipped and failed entries before retrying.
+1. **Connect calendar**: Open Calendar in the sidebar, choose a provider in connection settings, test the connection, and save.
+2. **Share free slots**: Open **Find available time**, search with your duration and buffer, then click **Copy free slots summary** to paste options into chat/email or **Create with this time** to review a draft.
+3. **Review with assistant**: Ask DSH chat to summarize your agenda and flag overlaps, or preview and import ICS entries in batches.
 
 ## Requirements and configuration
 
 Calendar credentials are required. Google uses OAuth2; other providers may use app passwords. Configure a proxy only when your network requires it.
 
 Detailed configuration, tool arguments and troubleshooting are in the [usage guide](USAGE.en.md). For standalone development, follow the Node requirement in [package.json](../package.json).
+
+See the [deployment contract](MULTIUSER.md) for opt-in person isolation, authenticated reverse proxies, multiple collections, and server-enforced read-only policies. DSH rc.5 itself exposes only an owner principal; multi-user identity needs a trusted provider. No real OIDC deployment was exercised in this validation.
+
+### Panel-only use and model tool switches
+
+Override `config.tools` on the `calendar` entry in the profile's `cordis.patch.yml`, then reload the plugin or restart DSH. Omit it or use `true` to register all seven model tools; use `false` to register none while retaining the panel, ICS import and smart drafts:
+
+```yaml
+- id: calendar
+  config:
+    tools: false
+```
+
+Alternatively, disable individual tools; unspecified tools remain enabled. For example, retain only read-only model tools:
+
+```yaml
+- id: calendar
+  config:
+    tools:
+      calendar_create: false
+      calendar_update: false
+      calendar_delete: false
+```
+
+Accepted names are `calendar_list`, `calendar_search`, `calendar_health`, `calendar_find_time`, `calendar_create`, `calendar_update` and `calendar_delete`. This controls model schemas only; **it does not make the panel or calendar account read-only**. Panel writes remain available.
 
 ## Documentation
 
@@ -58,7 +82,7 @@ Detailed configuration, tool arguments and troubleshooting are in the [usage gui
 
 ## Plugin updates
 
-Requires DSH 0.2.1-rc.3 or newer. Update controls sit at the bottom of the calendar sidebar and are also available in native plugin details. Checks, release notes and preferences expand in place, with no separate update page or settings menu. Automatic checks are on by default; **automatic installation is off by default**. Only explicit opt-in permits compatible stable patches while idle with no unsaved changes. Preferences are independent, with per-plugin disable, deferral and ignore controls. No forced DSH restart or upgrade, and local-source installations stay unchanged. Suite components explain and operate on the whole Suite in the same footer.
+Requires DSH `>=0.2.2-rc.3`. Update controls sit at the bottom of the calendar sidebar and are also available in native plugin details. Checks, release notes and preferences expand in place, with no separate update page or settings menu. Automatic checks are on by default; **automatic installation is off by default**. Only explicit opt-in permits compatible stable updates (minor and patch by default, or patch-only if selected) while idle with no unsaved changes. Preferences are independent, with per-plugin disable, deferral and ignore controls. No forced DSH restart or upgrade, and local-source installations stay unchanged. Suite components explain and operate on the whole Suite in the same footer.
 
 Older releases need one manual update in native plugin management to acquire these controls. Publishing to npm does not replace an existing user installation.
 

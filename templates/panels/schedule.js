@@ -88,11 +88,12 @@ function ScheduleRail({ id, anchor, onPick, source, showing, onVisibilityChange,
             h("section", { className: styles.railSection },
                 h("h2", null, calendars ? calendarText("日历", "Calendars") : calendarText("已连接日历", "Connected calendar")),
                 h("div", { className: styles.calendarSource }, source && calendars
-                    ? calendars.map(name => h(Chk, { key: name, checked: showing && !hiddenCalendars.has(name), label: name, title: name, onChange: () => onToggleCalendar(name) }))
+                    ? calendars.map(row => h(Chk, { key: row.id, checked: showing && !hiddenCalendars.has(row.id), label: row.name, title: row.name, onChange: () => onToggleCalendar(row.id) }))
                     : source
                     ? h(Chk, { checked: showing, label: source, title: source, onChange: onVisibilityChange })
-                    : h("p", { className: styles["dshc-sub"] }, loading ? t("state.loading") : calendarText("尚未连接日历", "No calendar connected"))),
-                source && showing ? h("div", { className: clsx(styles.conflictCard, hasConflicts && styles.warn) },
+                    : loading ? renderDshSkeleton(React, { variant: "text", lines: 1, label: t("state.loading") })
+                        : h("p", { className: styles["dshc-sub"] }, calendarText("尚未连接日历", "No calendar connected"))),
+                source && showing ? h("div", { className: clsx(styles.conflictCard, hasConflicts && styles.warn), "data-dsh-card": "" },
                     h(Icon, { name: hasConflicts ? "warning" : "check", size: 14 }),
                     h("div", null,
                         h("span", { role: "status" }, conflictText),
@@ -103,8 +104,6 @@ function ScheduleRail({ id, anchor, onPick, source, showing, onVisibilityChange,
                     )
                 ) : null
             )
-        ),
-        workbench ? h("div", { className: styles.railUpdates },
-            h(__StardustPluginUpdatesFooter, { React, name: "dsh-calendar" })) : null
+        )
     );
 }

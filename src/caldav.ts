@@ -76,13 +76,13 @@ export class CalendarService {
   private readonly collectionUrl: string
   private clientPromise?: Promise<DAVClient>
 
-  constructor(private readonly config: ResolvedConfig) {
+  constructor(private readonly config: ResolvedConfig, private readonly oauthFetch?: typeof fetch) {
     this.collectionUrl = ensureTrailingSlash(config.caldavUrl)
   }
 
   private client(): Promise<DAVClient> {
     if (this.clientPromise === undefined) {
-      const transport = this.config.proxyUrl !== '' ? createProxyFetch(this.config.proxyUrl) : globalThis.fetch
+      const transport = this.oauthFetch ?? (this.config.proxyUrl !== '' ? createProxyFetch(this.config.proxyUrl) : globalThis.fetch)
       const oauth = this.config.oauth
       this.clientPromise = createDAVClient({
         serverUrl: this.config.caldavUrl,
@@ -94,7 +94,7 @@ export class CalendarService {
         authFunction: async (): Promise<Record<string, string>> => oauth === undefined
           ? { authorization: 'Basic ' + Buffer.from(this.config.username + ':' + this.config.password, 'utf8').toString('base64') }
           : {},
-        fetch: oauth === undefined ? transport : createOAuthFetch(oauth, transport, this.config.caldavUrl),
+        fetch: this.oauthFetch ?? (oauth === undefined ? transport : createOAuthFetch(oauth, transport, this.config.caldavUrl)),
       })
     }
     // 创建失败时清掉缓存，让下一次工具调用有机会重试，而不是永久复用 rejected promise。
@@ -166,8 +166,8 @@ export class CalendarService {
     return events
   }
 
-  /** A complete read of the connected collection; never writes or reserves events. */
-  async availability(input: AvailabilityInput, signal?: AbortSignal): Promise<AvailabilityResult> {
+  /** Complete recurrence expansion for a single collection, shared by multi-calendar reads. */
+  async availabilityEvents(input: AvailabilityInput, signal?: AbortSignal): Promise<CalendarEvent[]> {
     const request = availabilityRequest(input), deadline = Date.now() + 20000, cancel = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20000)])
     cancel.throwIfAborted()
     const start = new Date(request.startMs - 2 * 86400000).toISOString(), end = new Date(request.endMs + 2 * 86400000).toISOString()
@@ -184,10 +184,18 @@ export class CalendarService {
         events.push(...busyResource(data, object.url, start, end, request.timeZone, deadline))
         if (events.length > 10000) throw new Error('日程实例超过 10000 条，请缩小空闲查询范围')
       }
-      cancel.throwIfAborted(); const result = findAvailableTimes(events, input)
+      cancel.throwIfAborted()
       if (Date.now() > deadline) throw new Error('空闲查询超时，请缩小范围')
-      return result
+      return events
     } catch (error) { cancel.throwIfAborted(); throw translateError(error, '查询空闲时段', this.config) }
+  }
+
+  /** A complete read of the connected collection; never writes or reserves events. */
+  async availability(input: AvailabilityInput, signal?: AbortSignal): Promise<AvailabilityResult> {
+    const deadline = Date.now() + 20000
+    const result = findAvailableTimes(await this.availabilityEvents(input, signal), input)
+    if (Date.now() > deadline) throw new Error('空闲查询超时，请缩小范围')
+    return result
   }
 
   /** 列出并展开：每个对象经 expandEventFromICal 展开为若干实例行。 */

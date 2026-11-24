@@ -7,6 +7,10 @@
 export declare function isRecurringResource(data: string): boolean;
 /** 一个暴露给模型的日历事件（或重复系列的一个展开实例）。 */
 export interface CalendarEvent {
+    /** Collection identity when several calendars share a connection. */
+    calendarId?: string;
+    calendarName?: string;
+    readOnly?: boolean;
     /** 稳定标识（CalDAV href），calendar_update / calendar_delete 用它。 */
     uid: string;
     /** 与 uid 相同的完整对象 URL，便于调试。 */
@@ -34,8 +38,6 @@ export interface CalendarEvent {
     url?: string;
     created?: string;
     lastModified?: string;
-    /** Name of the connected calendar the event came from (set when several are connected). */
-    calendar?: string;
 }
 /** 展开重复事件超出迭代预算：显式报错，避免把「没走到窗口」静默当成「窗口内没有实例」。 */
 export declare class ExpansionLimitError extends Error {

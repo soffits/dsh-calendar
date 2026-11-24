@@ -73,9 +73,9 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 "move.tooLong": "超过 24 小时的日程暂不支持拖动改期。",
                 "move.saved": "已改期",
                 "move.undo": "撤销",
-                "move.failed": "改期失败：{message}",
                 "fab.label": "在每个页面右下角显示日历小按钮",
                 "fab.hint": "关掉后仍可从侧栏打开日历。",
+                "move.failed": "改期失败：{message}",
                 "conn.button": "连接设置",
                 "conn.title": "CalDAV 连接设置",
                 "conn.intro": "测试连接不会修改日历。连接成功后，点击“保存并启用”。",
@@ -173,9 +173,9 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 "move.tooLong": "Events longer than 24 hours cannot be dragged yet.",
                 "move.saved": "Rescheduled",
                 "move.undo": "Undo",
-                "move.failed": "Could not reschedule: {message}",
                 "fab.label": "Show the floating calendar button on every page",
                 "fab.hint": "Turned off, the calendar is still in the sidebar.",
+                "move.failed": "Could not reschedule: {message}",
                 "conn.button": "Connection",
                 "conn.title": "CalDAV connection",
                 "conn.intro": "Testing the connection does not change your calendar. Once it succeeds, click Save and enable.",
@@ -411,7 +411,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 body = null;
             }
             if (!res.ok || !body || body.ok !== true) {
-                const message = body && body.error && body.error.message ? body.error.message : ("HTTP " + res.status);
+                const message = body?.error?.message || body?.message || ("HTTP " + res.status);
                 const error = new Error(message);
                 error.status = res.status;
                 error.code = body && body.error ? body.error.code : undefined;
@@ -693,19 +693,27 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
             const meta = [];
             if (event.location)
                 meta.push(event.location);
-            if (event.calendar)
-                meta.push(event.calendar);
+            if (event.calendarName)
+                meta.push(event.calendarName);
             if (event.rrule)
                 meta.push(humanRepeat(event.rrule));
             else if (event.isOccurrence)
                 meta.push(t("repeat.occurrence"));
-            return h("button", {
-                type: "button", className: clsx(styles["dshc-row"], conflicted && styles.conflicted), "data-dsh-row": "", onClick: () => onClick(event)
+            return h("div", {
+                className: clsx(styles["dshc-row"], conflicted && styles.conflicted),
+                "data-dsh-row": "",
+                "data-active": "false"
             },
-                h("span", { className: styles["dshc-time"] }, event.allDay ? t("format.allday") : (hhmm(startDate(event)) + "–" + hhmm(endDate(event)))),
-                h("span", { className: styles["dshc-main"] },
-                    h("span", { className: styles["dshc-name"] }, event.summary),
-                    meta.length > 0 ? h("span", { className: styles["dshc-meta"] }, meta.join(" · ")) : null
+                h("button", { type: "button", className: styles.rowTrigger, onClick: () => onClick(event) },
+                    h("span", { className: "dsh-pixel-cursor", "aria-hidden": "true" }, "▶"),
+                    h("span", { className: styles["dshc-time"] }, event.allDay ? t("format.allday") : (hhmm(startDate(event)) + "–" + hhmm(endDate(event)))),
+                    h("span", { className: styles["dshc-main"] },
+                        h("span", { className: styles["dshc-name"] }, event.summary),
+                        meta.length > 0 ? h("span", { className: styles["dshc-meta"] }, meta.join(" · ")) : null
+                    )
+                ),
+                h("div", { className: clsx("dsh-row-actions", styles.rowActions) },
+                    h(IconButton, { icon: "edit", label: calendarText("查看或编辑日程", "Inspect or edit event"), onClick: () => onClick(event) })
                 )
             );
         }
@@ -1112,7 +1120,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 return h(EmptyState, canCreate ? { title: t("state.empty"), action: h(Btn, { icon: "plus", variant: "primary", onClick: () => onCreateAt(new Date()) }, t("action.new")) } : { title: t("state.empty") });
             return h("div", { className: styles["dshc-agenda"] }, groups.map((group) => h("div", { className: styles["dshc-daygroup"], key: group.key },
                 h("div", { className: styles["dshc-daylabel"] },
-                    h("b", null, formatDay(group.day)),
+                    h("b", { "data-dsh-serif": "" }, formatDay(group.day)),
                     h("span", { className: styles["dshc-sub"] }, relativeDay(group.day)),
                     h("span", { className: styles["dshc-spacer"] }),
                     canCreate ? h(Btn, { variant: "ghost", onClick: () => onCreateAt(group.day) }, t("action.new")) : null
@@ -1151,11 +1159,15 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
             ];
         }
         /** 拉一个时间窗的事件；demo 为真时用示例数据，不打网络。 */
-        function useCalendarData(range, reloadToken, demo) {
+        function useCalendarData(range, reloadToken, demo, configured) {
             const [state, setState] = useState({ loading: true, error: null, events: [], configured: true });
             useEffect(() => {
                 if (demo === true) {
                     setState({ loading: false, error: null, events: demoEvents(), configured: true });
+                    return () => { };
+                }
+                if (configured !== true) {
+                    setState({ loading: configured === null, error: null, events: [], configured: false });
                     return () => { };
                 }
                 let alive = true;
@@ -1166,7 +1178,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                     .catch((error) => { if (alive)
                     setState({ loading: false, error, events: [], configured: error && error.code !== "not-configured" }); });
                 return () => { alive = false; };
-            }, [range.start, range.end, reloadToken, demo]);
+            }, [range.start, range.end, reloadToken, demo, configured]);
             return state;
         }
         // ───────────────────────────── 表单 ─────────────────────────────
@@ -1350,7 +1362,6 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 return () => onBusy?.(false);
             }, [busy, onBusy]);
 // Update protection: dsh-calendar.connection
-__stardustUpdatesGuard(React, "dsh-calendar.connection", { dirty: JSON.stringify(form) !== JSON.stringify(connectionDraftOf(connection)), busy: !!busy });
 
             const patch = (fields) => {
                 setForm((prev) => Object.assign({}, prev, fields));
@@ -1654,7 +1665,6 @@ __stardustUpdatesGuard(React, "dsh-calendar.connection", { dirty: JSON.stringify
             const [preview, setPreview] = useState(null), [selected, setSelected] = useState([]), [results, setResults] = useState({}), [error, setError] = useState(""), [busy, setBusy] = useState(false);
             const controller = useRef(null), alive = useRef(true), fileSequence = useRef(0);
 // Update protection: dsh-calendar.import
-__stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), busy });
 
             useEffect(() => {
                 alive.current = true;
@@ -1732,13 +1742,13 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const importStatusTone = { ready: styles.success, imported: styles.success, blocked: styles.warn, failed: styles.error };
             const title = t("import.title");
             const fields = h("div", { className: styles.card },
-                h("label", { className: styles["dshc-field"] },
-                    h("span", null, t("import.file")),
-                    h("input", { className: styles["dshc-input"], type: "file", accept: ".ics,text/calendar", disabled: busy, onChange: loadFile })
+                h("div", { className: styles["dshc-field"] },
+                    h("label", { htmlFor: timezoneId + "-file" }, t("import.file")),
+                    h("input", { id: timezoneId + "-file", className: styles["dshc-input"], type: "file", accept: ".ics,text/calendar", disabled: busy, onChange: loadFile })
                 ),
-                h("label", { className: styles["dshc-field"] },
-                    h("span", null, t("import.paste")),
-                    h("textarea", { className: clsx(styles["dshc-input"], styles.importText), value: content, rows: 5, disabled: busy, onChange: e => update(e.target.value), spellCheck: false })
+                h("div", { className: styles["dshc-field"] },
+                    h("label", { htmlFor: timezoneId + "-paste" }, t("import.paste")),
+                    h("textarea", { id: timezoneId + "-paste", className: clsx(styles["dshc-input"], styles.importText), value: content, rows: 5, disabled: busy, onChange: e => update(e.target.value), spellCheck: false })
                 ),
                 h("div", { className: styles["dshc-field"] },
                     h("label", { htmlFor: timezoneId }, t("import.timezone")),
@@ -1824,7 +1834,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const [anchor, setAnchor] = useState(() => new Date());
             const [showCalendar, setShowCalendar] = useState(true);
             const [hiddenCalendars, setHiddenCalendars] = useState(() => new Set());
-            const toggleCalendar = name => setHiddenCalendars(previous => { const next = new Set(previous); if (next.has(name)) next.delete(name); else next.add(name); return next; });
+            const toggleCalendar = id => setHiddenCalendars(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
             const [demo, setDemo] = useState(false);
             const [reloadToken, setReloadToken] = useState(0);
             const [selected, setSelected] = useState(null);
@@ -1840,6 +1850,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const [layout, setLayout] = useState(loadCalendarLayout);
             const [palette, setPalette] = useState(loadCalendarPalette);
             const [dshStyle, setDshStyle] = useDshStyle(React);
+            const [dshFont, setDshFont] = useDshFont(React);
             const dark = useCalendarDarkMode(workbench && dshStyle === "harness");
             const appearance = useMemo(() => workbench ? calendarAppearance(layout, palette, dark ? "dark" : "light", dshStyle) : undefined,
                 [workbench, layout, palette, dark, dshStyle]);
@@ -1847,14 +1858,23 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const [importBusy, setImportBusy] = useState(false);
             const [availabilityBusy, setAvailabilityBusy] = useState(false);
             const [connectionBusy, setConnectionBusy] = useState(false);
+            const [tour, setTour] = useState({ open: false, step: 0, manual: false });
+            const [tourLayout, setTourLayout] = useState(null);
             const importOpen = tool === "import";
             const availabilityOpen = tool === "availability";
             const connectionOpen = tool === "connection";
             const layerOpen = draft !== null || selected !== null || connOpen === true || utility !== null;
             // Update protection: dsh-calendar
-            __stardustUpdatesGuard(React, "dsh-calendar", { busy: busy || layerOpen || importOpen || availabilityOpen || connectionOpen });
 
             const rootRef = useRef(null);
+            const triggerRef = useRef(null);
+            const layerOpenRef = useRef(layerOpen);
+            layerOpenRef.current = layerOpen;
+            useEffect(() => {
+                if (layerOpen && tour.open) {
+                    setTour(prev => ({ ...prev, open: false }));
+                }
+            }, [layerOpen, tour.open]);
             /** 让 Launcher 知道本面板里有没有浮层：宿主 Portal 的 Esc 不能被面板级监听抢走。 */
             useEffect(() => {
                 const notify = typeof props.onLayerChange === "function" ? props.onLayerChange : null;
@@ -1928,14 +1948,16 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 return () => { alive = false; };
             }, [reloadToken]);
             const range = useMemo(() => rangeOf(view, anchor), [view, anchor.getFullYear(), anchor.getMonth(), anchor.getDate()]);
-            const data = useCalendarData(range, reloadToken, demo);
+            const data = useCalendarData(range, reloadToken, demo, configured);
             const reload = () => setReloadToken((n) => n + 1);
             /** 渲染用的事件：把乐观改期叠加在服务器数据之上。 */
             const eventsWithMoves = useMemo(() => data.events.map((event) => {
                 const override = overrides[event.uid];
                 return override === undefined ? event : Object.assign({}, event, override);
             }), [data.events, overrides]);
-            const visibleEvents = demo ? eventsWithMoves : showCalendar ? eventsWithMoves.filter(event => !event.calendar || !hiddenCalendars.has(event.calendar)) : NO_EVENTS;
+            const visibleEvents = useMemo(() => demo ? eventsWithMoves
+                : showCalendar ? eventsWithMoves.filter(event => !event.calendarId || !hiddenCalendars.has(event.calendarId)) : NO_EVENTS,
+                [demo, showCalendar, eventsWithMoves, hiddenCalendars]);
             const { count: conflicts, conflicted, overlap } = useMemo(() => conflictSummary(visibleEvents), [visibleEvents]);
             const source = conn?.configured ? conn.calendar || connectionSummary(conn) : null;
             /**
@@ -2216,42 +2238,70 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 view !== "agenda" ? h(Btn, { onClick: () => setAnchor(new Date()) }, t("action.today")) : null,
                 view !== "agenda" ? h(IconButton, { icon: "left", label: t("action.prev"), onClick: () => step(-1) }) : null,
                 view !== "agenda" ? h(IconButton, { icon: "right", label: t("action.next"), onClick: () => step(1) }) : null,
-                h("strong", { className: styles["dshc-monthhead"] }, title)
+                h("strong", { className: styles["dshc-monthhead"], "data-dsh-serif": "" }, title)
             );
             const refresh = demo
                 ? h(Btn, { onClick: () => setDemo(false) }, t("action.exitDemo"))
                 : h(IconButton, { icon: "refresh", label: t("action.refresh"), "aria-busy": data.loading || undefined, onClick: reload });
             const availabilityLabel = calendarText("找空闲时段", "Find available time");
             const quickLabel = calendarText("日历快捷操作", "Calendar quick actions");
-            const quickKey = workbench && document.documentElement.dataset.platform === "darwin" ? "⌘⇧K" : "Ctrl+Shift+K";
+            const isDarwin = workbench && document.documentElement.dataset.platform === "darwin";
+            const quickKey = isDarwin ? "⌘⇧K" : "Ctrl+Shift+K";
+            const compactQuickKey = isDarwin ? "⌘K" : "^K";
             const layoutOptions = workbench ? calendarLayoutOptions() : [];
             const selectLayout = value => { setLayout(value); storeCalendarPreference(CALENDAR_LAYOUT_KEY, value); };
             const selectPalette = value => { setPalette(value); storeCalendarPreference(CALENDAR_PALETTE_KEY, value); };
             const reviewConflicts = () => setUtility("conflicts");
             const readOnly = conn?.readOnly === true;
-            // A per-person connection is kept on the server: there is nothing to edit in the panel.
-            const canConnect = conn?.person === undefined;
             const canCreate = !demo && configured !== null && !toolBusy && !readOnly;
+            const closeTour = (restoreFocus = false) => {
+                writeCalendarTourDone();
+                setTour(prev => ({ ...prev, open: false }));
+                if (restoreFocus) {
+                    setTimeout(() => {
+                        (triggerRef.current || rootRef.current?.querySelector?.("[data-calendar-tour-trigger]"))?.focus?.();
+                    }, 0);
+                }
+            };
+            const tourSteps = [
+                {
+                    id: "focus-ribbon",
+                    selector: '[data-calendar-focus-ribbon="true"]',
+                    fallback: '[data-tour="calendar-views"]',
+                    side: "bottom",
+                    title: calendarText("今日聚焦条：下一场倒计时、冲突状态与快速新建", "Today Focus Ribbon: countdown, conflicts & quick add"),
+                    desc: calendarText("聚焦条常驻日历画布上方，一眼看清今天日期、下一场日程倒计时与无冲突/告警状态，支持 1 键「+ 快速新建」或回到今天；点顶栏「日历连接」可配置 iCloud / Google / CalDAV。", "The Today Focus Ribbon keeps today's date, next event countdown, conflict status, and + Quick add always in view; configure iCloud, Google OAuth, Nextcloud, or CalDAV in Connection.")
+                },
+                {
+                    id: "availability",
+                    selector: '[data-segment-id="availability"], [id$="-availability"]',
+                    fallback: '[data-tour="calendar-workspace-tabs"]',
+                    side: "bottom",
+                    title: calendarText("查找空闲时段并一键复制候选时间", "Find free slots & copy meeting options"),
+                    desc: calendarText("按 F 打开「找空闲时段」，查出候选后点「复制空闲时段文案」直接发微信/钉钉/邮件，或复制下方指令交给助手：", "Press F for Find available time and click Copy free slots summary for chat/email—or copy this assistant prompt:"),
+                    prompt: calendarText("帮我查一下本周工作时间的空闲时段，整理成可发送的会议候选时间", "Find my free working-hour slots this week and format meeting options"),
+                    promptLabel: calendarText("复制查空档指令", "Copy free-slots prompt")
+                },
+                {
+                    id: "smart-draft",
+                    selector: '[data-tour="calendar-new-event"]',
+                    fallback: ".topbar",
+                    side: "bottom",
+                    title: calendarText("冲突检查与从文字 / 截图智能建日程", "Conflict checks & smart drafts from text or screenshots"),
+                    desc: calendarText("点击「新建日程」或聚焦条「+ 快速新建」，可粘贴通知文字或拖入截图自动生成草稿，保存前自动检测时间重叠并在侧栏汇总冲突。", "Paste message text or drop a screenshot in New event / + Quick add to generate a reviewed draft, with automatic overlap detection before saving.")
+                }
+            ];
             const commandActions = workbench ? [
                 ...(readOnly ? [] : [{ id: "create", key: "n", label: t("action.new"), run: startDraft, disabled: !canCreate }]),
                 { id: "availability", key: "f", label: availabilityLabel, run: showAvailability, disabled: demo || configured === null },
                 { id: "conflicts", label: calendarText("查看日程冲突", "Review scheduling conflicts"), run: reviewConflicts, disabled: conflicts === 0 },
                 ...(readOnly ? [] : [{ id: "import", label: t("import.open"), run: () => setTool("import"), disabled: demo }]),
-                ...(canConnect ? [{ id: "connection", label: t("conn.title"), run: () => setTool("connection"), disabled: configured === null }] : []),
+                { id: "connection", label: t("conn.title"), run: () => setTool("connection"), disabled: configured === null },
+                { id: "tour", label: calendarText("使用引导", "Interactive guide"), run: () => setTour({ open: true, step: 0, manual: true }) },
                 ...VIEWS.map(name => ({
                     id: name, key: name[0],
                     label: calendarText("切换到" + t("view." + name) + "视图", "Switch to " + t("view." + name)),
                     run: () => { backToSchedule(); selectView(name); }
-                })),
-                ...layoutOptions.map(option => ({
-                    id: option.id,
-                    label: calendarText("切换布局 · ", "Switch layout · ") + option.label,
-                    run: () => selectLayout(option.id)
-                })),
-                ...DSH_STYLES.map(preset => ({
-                    id: "style-" + preset.id,
-                    label: calendarText("切换风格 · " + preset.zh, "Switch style · " + preset.en),
-                    run: () => setDshStyle(preset.id)
                 }))
             ] : [];
             function onWorkbenchKeyDown(event) {
@@ -2276,35 +2326,47 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 tool === "schedule" ? period : null,
                 tool === "schedule" ? views : null,
                 h("span", { className: styles["dshc-spacer"] }),
-                canConnect ? h(Btn, { disabled: configured === null || toolBusy, onClick: () => setConnOpen(true) }, t("conn.button")) : null,
+                h(Btn, { disabled: configured === null || toolBusy, onClick: () => setConnOpen(true) }, t("conn.button")),
                 readOnly ? null : h(Btn, { disabled: demo || toolBusy, onClick: () => importOpen ? backToSchedule() : setTool("import") }, t("import.open")),
                 h(Btn, { disabled: demo || configured !== true || toolBusy, onClick: () => availabilityOpen ? backToSchedule() : showAvailability() }, availabilityLabel),
                 refresh,
                 readOnly ? null : h(Btn, { variant: "primary", disabled: demo || toolBusy, onClick: () => createAt(anchor) }, t("action.new"))
             ) : null;
-            const topbar = !compact ? h("header", { className: styles.topbar },
-                h("div", { className: styles.brand },
-                    h("span", { className: styles.brandMark }, h(CalendarIcon)),
-                    h("h1", null, t("section.title"))
+            const topbar = !compact ? h("header", { className: clsx(styles.topbar, "dsh-header"), "data-dsh-header": "" },
+                h("div", { className: clsx(styles.brand, "dsh-header-brand") },
+                    h("span", { className: clsx(styles.brandMark, "dsh-header-badge") }, h(CalendarIcon)),
+                    h("h1", { className: "dsh-header-title" }, t("section.title"))
                 ),
                 h(Segments, {
                     id: workspaceId, label: t("section.title"), value: tool, disabled: toolBusy,
+                    "data-tour": "calendar-workspace-tabs",
                     items: [
                         { value: "schedule", label: calendarText("日程", "Schedule") },
-                        { value: "availability", label: availabilityLabel, disabled: demo || configured === null },
+                        { value: "availability", label: calendarText("找空闲时段", "Free time"), disabled: demo || configured === null },
                         ...(readOnly ? [] : [{ value: "import", label: t("import.open"), disabled: demo }]),
-                        ...(canConnect ? [{ value: "connection", label: calendarText("日历连接", "CalDAV"), disabled: configured === null }] : [])
+                        { value: "connection", label: calendarText("日历连接", "CalDAV"), disabled: configured === null }
                     ],
                     onChange: next => next === "availability" ? showAvailability() : setTool(next)
                 }),
-                h("div", { className: styles.topActions },
+                h("div", { className: clsx(styles.topActions, "dsh-header-actions") },
                     h("span", { className: styles.zone }, Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+                    h(Btn, {
+                        ref: triggerRef,
+                        variant: "ghost",
+                        className: styles.tourTrigger,
+                        "data-tour-trigger": "",
+                        "data-calendar-tour-trigger": "",
+                        "aria-label": calendarText("使用引导", "Interactive guide"),
+                        "aria-expanded": Boolean(tour.open && !layerOpen),
+                        title: calendarText("使用引导", "Interactive guide"),
+                        onClick: () => (tour.open && !layerOpen ? closeTour(true) : setTour({ open: true, step: 0, manual: true }))
+                    }, calendarText("? 引导", "? Tour")),
                     workbench ? h(Btn, {
                         className: styles.commandTrigger, icon: "search", disabled: toolBusy,
                         "aria-label": quickLabel, title: quickLabel + " (" + quickKey + ")",
                         onClick: () => setUtility("commands"), "aria-keyshortcuts": "Control+Shift+K Meta+Shift+K"
-                    }, h("kbd", { className: styles.triggerKey }, quickKey)) : null,
-                    readOnly ? null : h(Btn, { variant: "primary", icon: "plus", disabled: !canCreate, onClick: startDraft }, t("action.new"))
+                    }, h("kbd", { className: styles.triggerKey }, compactQuickKey)) : null,
+                    readOnly ? null : h(Btn, { variant: "primary", icon: "plus", "data-tour": "calendar-new-event", disabled: !canCreate, onClick: startDraft }, t("action.new"))
                 )
             ) : null;
 
@@ -2319,12 +2381,13 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     }, h("p", null, t("state.notConfiguredHint")));
                 }
                 if (configured === null || (data.loading && data.events.length === 0)) {
-                    return h("div", { className: styles["dshc-grid"], "aria-busy": true },
-                        Array.from({ length: configured === null ? 7 : 14 }, (_, key) => h("div", { className: styles["dshc-skel"], key })));
+                    return h("div", { className: styles["dshc-grid"], role: "status", "aria-busy": true, "aria-label": t("state.loading") },
+                        Array.from({ length: configured === null ? 7 : 14 }, (_, key) =>
+                            h("div", { className: clsx(styles["dshc-skel"], "dsh-skeleton"), "data-dsh-skeleton": "rect", "data-animated": "true", key })));
                 }
                 const calendarProps = { anchor, events: visibleEvents, conflicted, onPick: openEvent, onCreateAt: createAt, canCreate: !readOnly };
                 const calendar = view === "week"
-                    ? h(WeekView, { ...calendarProps, onReschedule: demo || conn?.readOnly === true ? undefined : reschedule })
+                    ? h(WeekView, { ...calendarProps, onReschedule: demo || readOnly ? undefined : reschedule })
                     : view === "agenda" ? h(AgendaView, calendarProps) : h(MonthView, calendarProps);
                 const message = !demo && !showCalendar
                     ? calendarText("当前日历已隐藏。", "The connected calendar is hidden.")
@@ -2341,14 +2404,14 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                 rail: compact ? null : h(ScheduleRail, {
                     id: viewId + "-sidebar",
                     anchor, onPick: setAnchor, source, showing: showCalendar, onVisibilityChange: setShowCalendar,
-                    calendars: Array.isArray(conn?.calendars) && conn.calendars.length > 0 ? conn.calendars : null, hiddenCalendars, onToggleCalendar: toggleCalendar,
+                    calendars: Array.isArray(conn?.calendars) && conn.calendars.length > 1 ? conn.calendars : null, hiddenCalendars, onToggleCalendar: toggleCalendar,
                     conflicts, overlap, workbench, loading: configured === null,
                     onReviewConflicts: workbench ? reviewConflicts : undefined
                 })
             },
                 h("div", { className: styles.scheduleMain },
                     compact ? null : h("div", { className: styles.calendarToolbar }, period,
-                        h("div", { className: styles.period }, views,
+                        h("div", { className: styles.period, "data-tour": "calendar-views" }, views,
                             workbench && conflicts > 0 ? h(Btn, {
                                 className: styles.toolbarConflicts, icon: "warning", onClick: reviewConflicts
                             }, calendarText("查看日程冲突", "Review conflicts")) : null,
@@ -2358,8 +2421,19 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                         h("span", { className: styles["dshc-spacer"] }),
                         h(Btn, { onClick: reload }, t("action.retry"))
                     ) : null,
+                    !compact ? h(TodayFocusRibbon, {
+                        events: visibleEvents,
+                        conflicts,
+                        canCreate,
+                        configured,
+                        demo,
+                        onJumpToday: () => setAnchor(new Date()),
+                        onOpenEvent: openEvent,
+                        onReviewConflicts: reviewConflicts,
+                        onCreate: startDraft
+                    }) : null,
                     h("div", { className: styles.calendarSurface },
-                        h("div", { id: viewId + "-" + view + "-panel", role: "tabpanel", "aria-labelledby": viewId + "-" + view }, renderCalendar())
+                        h("div", { id: viewId + "-" + view + "-panel", className: "dsh-tab-panel", role: "tabpanel", "aria-labelledby": viewId + "-" + view }, renderCalendar())
                     ),
                     h("footer", { className: styles["dshc-footer"] },
                         h("span", null, t("count.events", { n: visibleEvents.length }) +
@@ -2386,7 +2460,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             const original = draft?.uid && !draft.isSeries ? data.events.find(event => event.uid === draft.uid) : undefined;
             const page = h("section", {
                 ref: rootRef, className: clsx(styles["dshc-root"], workbench && LAYOUT_CLASSES[layout]),
-                "data-main": workbench, "data-compact": compact, "data-dsh-style": dshStyle, style: appearance,
+                "data-main": workbench, "data-compact": compact, "data-calendar-layout": workbench ? (layout === "cards" ? "bento" : layout) : undefined, "data-dsh-style": dshStyle, "data-dsh-font": dshFont, style: appearance,
                 onPointerMove: workbench ? moveCalendarSpotlight : undefined,
                 tabIndex: workbench ? 0 : undefined, onKeyDown: workbench ? onWorkbenchKeyDown : undefined
             },
@@ -2400,15 +2474,30 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     demo ? h("div", { className: clsx(styles["dshc-alert"], styles.demo) }, t("demo.banner")) : null,
                     compact ? workspacePage : h("div", { className: styles.workspacePanel,
                         id: workspaceId + "-" + tool + "-panel", role: "tabpanel", "aria-labelledby": workspaceId + "-" + tool
-                    }, workbench && tool !== "schedule" && typeof __stardustUpdatesFooter === "function"
-                        ? h("div", { className: styles.workspaceScroll },
-                            workspacePage,
-                            h("div", { className: clsx(styles.pageInner, styles.pageUpdates) },
-                                __stardustUpdatesFooter(React, "dsh-calendar")))
-                        : workspacePage)
+                    }, workspacePage)
                 ),
+                !compact && !layerOpen && tour.open ? h(CoachmarkTour, {
+                    rootRef,
+                    steps: tourSteps,
+                    step: tour.step,
+                    manual: tour.manual,
+                    style: dshStyle,
+                    font: dshFont,
+                    appearance,
+                    lang: UI_LANG,
+                    activeKey: tool + ":" + view,
+                    layout: tourLayout,
+                    setLayout: setTourLayout,
+                    onStep: (nextStep, isManual) => setTour({ open: true, step: nextStep, manual: Boolean(isManual) }),
+                    onClose: closeTour,
+                    onCopyPrompt: async promptText => {
+                        const ok = await copyText(promptText);
+                        if (ok) notify(calendarText("已复制对话指令，可直接粘贴到聊天框", "Copied prompt — paste it into chat"));
+                        return ok;
+                    }
+                }) : null,
                 selected ? h(EventReview, {
-                    event: selected, readOnly: demo, events: data.events, busy, confirmDelete, setConfirmDelete,
+                    event: selected, readOnly: demo || readOnly || selected?.readOnly === true, events: data.events, busy, confirmDelete, setConfirmDelete,
                     onClose: closeReview, onEdit: editEvent, onDelete: remove
                 }) : null,
                 draft ? h(EventForm, {
@@ -2435,7 +2524,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             useUILanguage();
             return h("div", null, workbench ? null : h(FloatingButtonSetting, {}), h(CalendarPanel, { workbench }));
         }
-        /** 右下角小按钮要不要显示：每个人自己的设置，存在服务器上，Launcher 实时读。 */
+        /** Whether the floating button shows: each person's own setting, kept on the server and read live by the Launcher. */
         const FAB_EVENT = "dsh-calendar:preferences";
         function useFloatingButton() {
             const [state, setState] = useState({ show: true, editable: false });
@@ -2481,6 +2570,7 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
             useUILanguage();
             const { show } = useFloatingButton();
             const [dshStyle] = useDshStyle(React);
+            const [dshFont] = useDshFont(React);
             const [open, setOpen] = useState(false);
             const [layerOpen, setLayerOpen] = useState(false);
             useEffect(() => {
@@ -2503,13 +2593,14 @@ __stardustUpdatesGuard(React, "dsh-calendar.import", { dirty: !!content.trim(), 
                     type: "button",
                     className: styles["dshc-fab"],
                     "data-dsh-style": dshStyle,
+                    "data-dsh-font": dshFont,
                     "data-window-drag-exclude": "",
                     "aria-expanded": open,
                     title: t("nav.title"),
                     "aria-label": t("nav.title"),
                     onClick: () => setOpen((value) => !value)
                 }, h(CalendarIcon, { size: 18 })),
-                open === true ? h("div", { className: styles["dshc-float"], "data-dsh-style": dshStyle, "data-window-drag-exclude": "" }, h(CalendarPanel, { compact: true, onLayerChange: setLayerOpen })) : null
+                open === true ? h("div", { className: styles["dshc-float"], "data-dsh-style": dshStyle, "data-dsh-font": dshFont, "data-window-drag-exclude": "" }, h(CalendarPanel, { compact: true, onLayerChange: setLayerOpen })) : null
             );
         }
         // ───────────────────────────── 挂载 ─────────────────────────────

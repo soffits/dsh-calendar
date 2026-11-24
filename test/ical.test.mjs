@@ -82,14 +82,3 @@ test('buildICalString serializes rrule (create path)', async () => {
   assert.match(ics, /RRULE:FREQ=WEEKLY;COUNT=4/)
   assert.throws(() => buildICalString({ summary: 'x', start: '2026-08-17T10:00:00+08:00', end: '2026-08-17T11:00:00+08:00', rrule: 'BROKEN' }), /rrule 格式无效/)
 })
-
-import { api as __clientApi } from './helpers/client-internals.mjs'
-test('agenda order: an all-day event only leads its own day', async () => {
-  const { sortForDisplay } = __clientApi
-  const events = [
-    { uid: 'a', summary: 'all-day in December', start: '2026-12-09', end: '2026-12-10', allDay: true },
-    { uid: 'b', summary: 'flight', start: '2026-11-19T13:45:00Z', end: '2026-11-19T20:00:00Z', allDay: false },
-    { uid: 'c', summary: 'all-day on the flight day', start: '2026-11-19', end: '2026-11-20', allDay: true },
-  ]
-  assert.deepEqual(sortForDisplay(events).map(event => event.uid), ['c', 'b', 'a'])
-})

@@ -2,75 +2,75 @@
 
 # Calendar
 
-**DeepSeek Harness native calendar workbench: manage CalDAV schedules, find open slots, preview ICS imports, and switch layouts, palettes, and five UI themes.**
+> **Inspect schedules, find open slots, and verify conflicts before writing to CalDAV calendars.**
+
+Native calendar workbench for DeepSeek Harness (`>=0.2.2-rc.3`): opens in the tactile **Bento** card studio with a live **Today Focus Ribbon**, 4 switchable layouts, and 13 bright styles × 8 fonts.
 
 [![npm](https://img.shields.io/npm/v/dsh-calendar)](https://www.npmjs.com/package/dsh-calendar) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-calendar-downloads.svg)](https://www.npmjs.com/package/dsh-calendar) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-calendar-total-downloads.svg)](https://www.npmjs.com/package/dsh-calendar)
 
-**[Install](#install) · [Workflow](#start-using-it) · [Full guide](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md)**
+**[Features](#features) · [Install](#install) · [Workflow](#start-using-it) · [Full guide](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md)**
 
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 640px)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/workflow-en-mobile-dark.svg">
   <source media="(max-width: 640px)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/workflow-en-mobile-light.svg">
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/workflow-en-dark.svg">
-  <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/workflow-en-light.svg" alt="See your schedule and find time in your calendar. · workflow illustration" width="100%">
+  <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/workflow-en-light.svg" alt="Bento calendar studio & Today Focus Ribbon: inspect events, find slots, and review before saving. · workflow illustration" width="100%">
 </picture>
 
 ## Features
 
-- Plan with month, week and agenda views, week drag-to-reschedule, iCloud calendar discovery, and reviewed smart event drafts from text or screenshots.
-- Find candidates using duration, weekdays and buffers.
-- Review event drafts or ICS imports before confirming writes.
-- Harmonized layouts, event palettes, and five switchable UI themes (Native Airy, Warm Cream, Claude Warmth, Bright 8-Bit, and Airy Mint) with breathable slate dark mode.
+| Pillar | Capabilities |
+| :--- | :--- |
+| **Bento Studio + Focus Ribbon** | Default tactile **Bento** card grid (toggle Native / Floating / Spotlight / Bento) paired with a live **Today Focus Ribbon** (countdown, conflict badge & `+ Quick event`) |
+| **Multi-View Scheduling** | Month / Week / Agenda views (`M`/`W`/`A`), week-view drag-to-reschedule (15-min snap + 5s undo), iCloud auto-discovery & text/screenshot smart drafts |
+| **Open-Slot Finder & Share** | Search available times by duration, weekdays & buffers (`F`), then copy formatted slot summaries straight to chat or email |
+| **Conflict-Safe Writes & ICS** | Every new draft and `.ics` import checks overlaps and duplicates before saving to CalDAV |
+| **Tour & Synced Themes** | 4-step `? Tour` spotlight guide, 13 visual styles, 4 event palettes, and 8 fonts (default: YouYuan Mono) with soft-slate dark mode |
 
 <details>
-<summary>See a workbench example</summary>
+<summary>See a workbench example (Bento + Today Focus Ribbon)</summary>
 
-![Calendar month view in Mint theme with DSH native layout](https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/screen-en.webp)
+![Calendar default Bento studio layout with Today Focus Ribbon](https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/main/docs/assets/intro/screen-en.webp)
 
-Calendar 0.18.1 running in DeepSeek Harness 0.2.2-rc.3 (Mint theme) with sample events.
+Calendar running in DeepSeek Harness 0.2.2-rc.3 with sample events.
 
 </details>
 
 ## Install
 
-Open **Plugins** in the DSH desktop app and install `dsh-calendar`. If the CLI is available:
+Open **Plugins** in the DSH desktop app and install `dsh-calendar`, or use the CLI:
 
 ```bash
 dsh plugin --profile desktop add dsh-calendar
 ```
 
-For the web profile, replace `desktop` with `web`. Restart that DSH profile after installation. The package’s DSH requirement is `>=0.2.2-rc.3`.
+For the web profile, replace `desktop` with `web` and restart DSH. Requires DSH `>=0.2.2-rc.3`.
 
 ## Start using it
 
-1. Open Calendar in the sidebar; choose a provider in connection settings and enter your account credentials.
-2. Test the connection, select a calendar and verify its time zone before using month, week or agenda views.
-3. Before creating or editing an event, check its date, time and destination calendar, then confirm.
-4. Preview and select ICS entries before importing; review skipped and failed entries before retrying.
+1. **Connect or preview a sample**: Open **Calendar** in the sidebar, pick iCloud, Google, Nextcloud, or custom CalDAV in **Connection**, run **Test connection**, and save — or click **See a sample** first.
+2. **Switch views & find slots**: Press `M / W / A` for views and `F` for **Find available time**; copy formatted free-slot text or jump straight into a pre-filled draft.
+3. **Verify conflicts & save**: Click `+ Quick event` to draft from text/screenshots or preview `.ics` files, and open `? Tour` anytime for ready-made chat prompts.
 
-Example request：
+### Ready-to-copy prompts
 
-> Read this week in the connected calendar and summarize conflicts I should check.
+- **Find open slots**: `Find two 45-minute free slots this week in the afternoon (13:30–18:00) with a 15-minute buffer, and list the candidates first without creating an event.`
+- **Today's agenda**: `Summarize today's meeting agenda in chronological order with locations, and highlight any scheduling overlaps.`
+- **Deep-work blocks**: `Read my schedule for next week, identify the busiest day, and list 2-hour uninterrupted blocks for deep work.`
 
 ## Before you start
 
-Bring your own CalDAV account. Availability covers only the currently connected calendar.
-
-Configuration, detailed tools and troubleshooting: [full reference](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md).
+- Bring your own CalDAV account; availability checks cover only connected calendars.
+- Full configuration, tools, and troubleshooting: [full reference](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md).
 
 ## Plugin updates
 
-Check updates at the bottom of the workbench or native plugin details. Automatic checks are on by default; **automatic installation is off**. You choose whether to install and when to restart. Suite-managed components update with their bundle. [Update behavior](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md).
+Check updates at the bottom of the workbench or native plugin details. Automatic checks are on by default; **automatic installation is off**. Suite-managed components update with their bundle.
 
-## Documentation
+## Documentation & feedback
 
-- [Full usage, configuration and limits](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md)
-- [Release notes](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/CHANGELOG.md)
-- [Validation scope and history](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/VALIDATION.md)
-
-## Feedback and contributions
-
-If the plugin helps, a Star makes it easier for others to discover. Report problems or suggest improvements in [Issues](https://github.com/STARDUSTLC666/dsh-calendar/issues); code and documentation [PRs](https://github.com/STARDUSTLC666/dsh-calendar/pulls) are welcome. Include versions and reproduction steps, and remove credentials from reports.
+- [Full usage, configuration and limits](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/REFERENCE.en.md) · [Release notes](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/CHANGELOG.md) · [Validation history](https://github.com/STARDUSTLC666/dsh-calendar/blob/main/docs/VALIDATION.md)
+- Stars, [Issues](https://github.com/STARDUSTLC666/dsh-calendar/issues), and [PRs](https://github.com/STARDUSTLC666/dsh-calendar/pulls) are welcome (strip credentials first).
 
 ## License
 
@@ -78,16 +78,3 @@ If the plugin helps, a Star makes it easier for others to discover. Report probl
 
 <a id="what-it-does"></a>
 <a id="requirements-and-configuration"></a>
-
-## Several people on one DSH
-
-Set `people` (verified user id → person) or `peopleFile` (+ `peopleKey`), and `connectionsDir`. Each person gets `connectionsDir/<person>.json`:
-
-```json
-{ "provider": "icloud", "username": "me@icloud.com", "passwordFile": "/path/to/app-password",
-  "readOnly": true, "calendars": [{ "name": "Personal", "url": "https://caldav.icloud.com/…/" }] }
-```
-
-The user id comes from a `requestIdentity` service (dsh-oidc provides one); without it, or for someone with no mapping, the panel refuses instead of showing a shared calendar. The password is read on the server and never sent to the browser. `tools: false` removes the model-facing tools and keeps the panel.
-
-The floating calendar button in the bottom-right corner is on by default. Each person can turn theirs off in the calendar section of Settings, which stores `"floatingButton": false` in their connection file; without per-person connections, set `floatingButton: false` on the plugin row.
