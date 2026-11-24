@@ -46,7 +46,7 @@ function nonEmptyExactId(value: unknown): value is string {
  * non-owner Principal gets its own exact, namespaced subject. An unavailable or
  * malformed configured identity service is an error, never an owner fallback.
  */
-export function resolveCalendarCaller(principal: unknown, requestIdentity?: RequestIdentityLike): CalendarCaller {
+export function resolveCalendarCaller(principal: unknown, requestIdentity?: RequestIdentityLike, people?: PeopleOptions): CalendarCaller {
   if (requestIdentity !== undefined) {
     if (typeof requestIdentity !== 'object' || requestIdentity === null || typeof requestIdentity.current !== 'function') {
       throw new CalendarIdentityError()
@@ -59,7 +59,8 @@ export function resolveCalendarCaller(principal: unknown, requestIdentity?: Requ
     }
     const identity = record(current)
     if (!identity || !nonEmptyExactId(identity.id)) throw new CalendarIdentityError()
-    return { kind: 'person', subject: `oidc:${identity.id}` }
+    const person = people !== undefined ? personFor(people, identity.id) : undefined
+    return { kind: 'person', subject: person !== undefined ? `person:${person}` : `oidc:${identity.id}` }
   }
 
   const trustedPrincipal = record(principal)
@@ -71,15 +72,57 @@ export function resolveCalendarCaller(principal: unknown, requestIdentity?: Requ
   return { kind: 'person', subject: `principal:${JSON.stringify([trustedPrincipal.kind, trustedPrincipal.id])}` }
 }
 
+/**
+ * A people map names who is behind a verified sign-in: `people` inline, or `peopleFile` (JSON, the
+ * object under `peopleKey` when set), read on every request so edits apply at once. Several sign-ins
+ * may map to one person, who then has one connection file, `<connectionsDir>/<person>.json`.
+ */
+export interface PeopleOptions {
+  people?: Record<string, string>
+  peopleFile?: string
+  peopleKey?: string
+}
+
+/** A person id is also a file name, so it is kept to a small safe alphabet. */
+const SAFE_PERSON = /^[a-z0-9][a-z0-9._-]{0,63}$/
+
+export function peopleEnabled(options: PeopleOptions): boolean {
+  return Object.keys(options.people ?? {}).length > 0 || (options.peopleFile ?? '') !== ''
+}
+
+function peopleFromFile(file: string, key: string | undefined): Record<string, unknown> {
+  let value: unknown = JSON.parse(readFileSync(file, 'utf8'))
+  if (key) value = record(value)?.[key]
+  const map = record(value)
+  if (!map) throw new Error(`no object at ${key || 'the top level'}`)
+  return map
+}
+
+/** The person a verified sign-in id belongs to; an unreadable file or an unsafe name maps nobody. */
+export function personFor(options: PeopleOptions, id: string): string | undefined {
+  let fromFile: Record<string, unknown> = {}
+  if (options.peopleFile) {
+    try { fromFile = peopleFromFile(options.peopleFile, options.peopleKey) }
+    catch (error) { console.warn(`dsh-calendar: people file ${options.peopleFile}: ${(error as Error).message}; nobody is mapped from it`) }
+  }
+  const found = Object.hasOwn(options.people ?? {}, id) ? options.people![id] : Object.hasOwn(fromFile, id) ? fromFile[id] : undefined
+  if (typeof found !== 'string') return undefined
+  const person = found.trim().normalize('NFKC').toLowerCase()
+  return SAFE_PERSON.test(person) ? person : undefined
+}
+
 /** Stable opaque filename key; the original subject's case and code points matter. */
 export function personStorageKey(subject: string): string {
   if (!nonEmptyExactId(subject)) throw new CalendarIdentityError()
   return createHash('sha256').update('dsh-calendar-person-v1\0').update(subject, 'utf8').digest('hex')
 }
 
-/** The file path contains only a SHA-256 digest, never a user-supplied ID. */
+/** The file path is a mapped person's own name or a SHA-256 digest, never a user-supplied ID. */
 export function personConnectionFile(connectionsDir: string, caller: CalendarPersonCaller): string {
   if (!caller || caller.kind !== 'person') throw new CalendarIdentityError()
+  // A mapped person is named by the administrator, so their file is named after them.
+  const person = caller.subject.startsWith('person:') ? caller.subject.slice('person:'.length) : undefined
+  if (person !== undefined && SAFE_PERSON.test(person)) return join(connectionsDir, person + '.json')
   return join(connectionsDir, personStorageKey(caller.subject) + '.json')
 }
 

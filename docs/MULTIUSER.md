@@ -82,3 +82,20 @@ writeCalendar: personal
 - 多集合读取与事件归属、明确写入目标、连接/集合只读均有回归。
 - 只读策略在 ICS 预览后启用也会阻止提交；其他人员的后端无法提交别人的预览 ID。
 - 没有使用真实 CalDAV 或 OIDC 账号完成线上收发验收；这些是合同、协议 fixture 与自动回归结果。
+
+## People map and password files (this fork)
+
+`people` (inline) or `peopleFile` with `peopleKey` maps a verified `requestIdentity` id to a person id (`a-z0-9._-`). A mapped person's file is `<connectionsDir>/<person>.json`, so several sign-ins of one person share it. The map is read on every request, and configuring one turns per-person mode on without `perUser`. Sign-ins outside the map keep the hashed file described above.
+
+```yaml
+- id: calendar
+  config:
+    tools: false
+    peopleFile: /srv/dsh/people.json
+    peopleKey: oidc_users
+    people: { local-desk: alice }
+    connectionsDir: /srv/dsh/calendar-people
+    floatingButton: false
+```
+
+A connection's `value` may hold `passwordFile` instead of `password`. The file is read on the server when the connection is built and never sent to the browser. Saving the connection form keeps `passwordFile` and the person's `floatingButton` choice.

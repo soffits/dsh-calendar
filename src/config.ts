@@ -4,6 +4,7 @@
  *
  * @module dsh-calendar/config
  */
+import { readFileSync } from 'node:fs'
 
 /** 支持的 provider 预设。 */
 export type CalendarProvider = 'google' | 'icloud' | 'nextcloud' | 'custom'
@@ -36,6 +37,13 @@ export interface CalendarConfig {
   /** Opt-in legacy owner access in per-user mode; default is to require a person. */
   allowOwnerFallback?: boolean
   connectionsDir?: string
+  /** Map of verified sign-in id -> person id; several sign-ins may share one person. Turns on per-person mode. */
+  people?: Record<string, string>
+  /** JSON file holding such a map (an object under `peopleKey` when set); read on every request. */
+  peopleFile?: string
+  peopleKey?: string
+  /** `false` hides the floating calendar button by default; a person's own `floatingButton` setting wins. */
+  floatingButton?: boolean
   /** provider 预设；默认 custom。 */
   provider?: CalendarProvider
   /** 完整日历集合 URL；custom / icloud 必填，google / nextcloud 可由此手填覆盖预设。 */
@@ -44,6 +52,8 @@ export interface CalendarConfig {
   username?: string
   /** Basic 密码；支持 DSH_CALENDAR_PASSWORD。iCloud 请用应用专用密码；Google 不支持 Basic。 */
   password?: string
+  /** File holding the password, read on the server when a connection is built (used when `password` is empty). */
+  passwordFile?: string
   /** google 默认 oauth，其他 provider 默认 basic；Google 不允许 basic。 */
   authMethod?: CalendarAuthMethod
   /** OAuth 客户端 ID；也可用 DSH_CALENDAR_CLIENT_ID。 */
@@ -152,6 +162,13 @@ export function validateOAuthUrl(value: string, field: string): void {
   throw new ConfigError('dsh-calendar 的 OAuth ' + field + ' 必须是有效的 HTTPS 地址，且不能包含账号、密码、查询参数或片段。')
 }
 
+/** The password kept in `passwordFile`; a missing or unreadable file counts as no password. */
+export function passwordFromFile(file: string | undefined): string | undefined {
+  const path = nonEmpty(file)
+  if (path === undefined) return undefined
+  try { return nonEmpty(readFileSync(path, 'utf8').trim()) } catch { return undefined }
+}
+
 /** 独立解析认证，供离线健康检查复用；不会发起网络请求或回显凭据。 */
 export function resolveCredentials(
   config: CalendarConfig | undefined,
@@ -177,7 +194,7 @@ export function resolveCredentials(
     return { username: nonEmpty(config?.username) ?? '', password: '', oauth: { tokenUrl, clientId, clientSecret, refreshToken } }
   }
   const username = nonEmpty(config?.username)
-  const password = nonEmpty(config?.password) ?? nonEmpty(env.DSH_CALENDAR_PASSWORD)
+  const password = nonEmpty(config?.password) ?? passwordFromFile(config?.passwordFile) ?? nonEmpty(env.DSH_CALENDAR_PASSWORD)
 
   if (username === undefined) {
     throw new ConfigError(

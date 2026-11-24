@@ -1,5 +1,19 @@
 # 更新记录
 
+## 0.21.3-soffits.1 (2026-11-24)
+
+This fork now sits on upstream 0.21.3 and keeps only what upstream doesn't have. Upstream's own per-person files, multiple calendars and server-side `readOnly` replace the fork's earlier versions of those.
+
+- People map: `people` / `peopleFile` (+ `peopleKey`) map a verified `requestIdentity` id to a person. Several sign-ins can share one person, whose file is `<connectionsDir>/<person>.json` (upstream's `{schemaVersion, revision, value}` format). A configured map turns per-person mode on by itself. Sign-ins outside the map keep upstream's private hashed file.
+- `passwordFile`: a connection can point at a file holding its password, read on the server when the connection is built. Saving the connection form keeps it.
+- `floatingButton`: `false` on the row hides the floating button by default. Each person can choose for themselves in Settings, and that choice is kept in their file.
+- Read-only connections hide New event, Import ICS, drag-to-reschedule, the N hint and the create affordances in month, week and agenda. Event review disables edit and delete for read-only events.
+- The sidebar lists every connected calendar with its own show/hide checkbox, and rows name their calendar.
+- Agenda: an all-day event no longer jumps ahead of earlier days.
+- Phones: only the header keeps clear of the host's window controls. The sidebar stacks into one column under 620 px and the mini calendar is hidden there. Long names wrap, and agenda rows no longer scroll sideways. Touch targets are 40 px, keyboard hints are hidden on touch, and UI chrome can't be text-selected.
+- Removed the style, font, layout and palette pickers (the panel follows DSH's theme). The guide no longer opens by itself, and its layout step is gone.
+- Removed the bundled `@stardustlc/dsh-updates` updater: this fork ships from its own repository, and the in-panel update button would have replaced it with the upstream npm package.
+
 ## 0.21.3 (2026-11-23)
 
 - 修复 Harness 0.2.3 Alpha 中连接、ICS 导入和智能草稿接口返回 400。日历复用宿主对 Fetch 路由的鉴权，继续核对用户身份，并支持无请求体的连接状态查询。

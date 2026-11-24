@@ -20,7 +20,6 @@ function CalendarDraftInput({ onFill, onBusy }) {
     const [busy, setBusy] = useState(false);
     const request = useRef(null);
     const fileInput = useRef(null);
-    __stardustUpdatesGuard(React, "dsh-calendar.smart-draft", { dirty: !!input.trim() || !!file, busy });
 
     useEffect(() => {
         const controller = new AbortController();

@@ -12,7 +12,7 @@ if (!SOURCE.includes('return module.exports;')) {
 }
 const PATCHED = SOURCE.replace('return module.exports;', EXPOSE + '\nreturn module.exports;');
 
-async function mountEnv({ withHostModal = false, darkHost = false, events = [] } = {}) {
+async function mountEnv({ withHostModal = false, darkHost = false, events = [], connection = {} } = {}) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     pretendToBeVisual: true,
     url: 'http://localhost/',
@@ -23,7 +23,7 @@ async function mountEnv({ withHostModal = false, darkHost = false, events = [] }
   win.fetch = async (_url, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     if (body.action === 'connection') {
-      return { ok: true, status: 200, json: async () => ({ ok: true, value: { configured: true, provider: 'custom', caldavUrl: 'https://example.test/dav', username: 'u' } }) };
+      return { ok: true, status: 200, json: async () => ({ ok: true, value: { configured: true, provider: 'custom', caldavUrl: 'https://example.test/dav', username: 'u', ...connection } }) };
     }
     return { ok: true, status: 200, json: async () => ({ ok: true, value: { count: events.length, start: '', end: '', events } }) };
   };
@@ -83,14 +83,17 @@ async function mountEnv({ withHostModal = false, darkHost = false, events = [] }
   return { win, react, probe: captured.__themeProbe, render };
 }
 
-test('DSH >=0.2.2-rc.3 manifest, window clearances, drag exclusion, and dsh-updates footer are intact', async () => {
+test('DSH >=0.2.2-rc.3 manifest, window clearances and drag exclusion are intact, and no self-updater ships', async () => {
   assert.equal(PKG.engines?.dsh, '>=0.2.2-rc.3');
   assert.deepEqual(PKG.dsh?.client?.inject, [
     '@deepseek-ai/dsh-client-ui-settings',
     '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-sidebar',
   ]);
-  assert.match(SOURCE, /data-plugin-update-footer|__StardustPluginUpdatesFooter/);
+  // This fork ships through its own repository; an in-panel updater would replace it with the upstream package.
+  assert.doesNotMatch(SOURCE, /__StardustPluginUpdatesFooter|__stardustUpdates/);
+  assert.equal(PKG.dependencies?.['@stardustlc/dsh-updates'], undefined);
+  assert.doesNotMatch(readFileSync(new URL('lib/index.js', ROOT_URL), 'utf8'), /dsh-updates|registerUpdates/);
   const { probe, win } = await mountEnv();
   try {
     assert.match(probe.CSS, /--dsh-frame-top-clearance/);
@@ -117,90 +120,25 @@ test('never-too-dark: pitch-black surfaces are eliminated and host dark mode use
   }
 });
 
-test('13-style theme switcher & 8-font pairing switcher sync workbench, harmonizes layout/palette, and updates portaled Modal dialogs', async () => {
+test('the workbench has no theme, font, layout or palette pickers, and dialogs still follow the shared style', async () => {
   const { win, react, probe, render } = await mountEnv({ withHostModal: true });
   const { container, unmount } = await render(react.createElement(probe.CalendarPanel, { workbench: true }));
   try {
-    assert.deepEqual(
-      Array.from(probe.DSH_STYLES, item => item.id),
-      ['harness', 'cream', 'claude', 'pixel8bit', 'mint', 'glass', 'eink', 'blueprint', 'risograph', 'win98', 'songhui', 'frutiger', 'gazette'],
-    );
-    assert.equal(probe.DSH_DEFAULT_FONT, 'arcade');
-    assert.deepEqual(
-      Array.from(probe.DSH_FONTS, item => item.id),
-      ['arcade', 'auto', 'songkai', 'fangsong', 'poster', 'retro98', 'serif', 'modern'],
-    );
-    assert.ok(probe.CSS.toLowerCase().includes('#f6f3ec'), 'gazette newsprint surface present in CSS');
-    const rootSection = container.querySelector('.dshc-root');
-    assert.equal(rootSection.getAttribute('data-dsh-style'), 'harness');
-    assert.equal(rootSection.getAttribute('data-dsh-font'), 'arcade');
-
-    // Open StyleSwitcher menu and pick pixel8bit
-    const switcherTrigger = container.querySelector('.dsh-style-trigger');
-    assert.ok(switcherTrigger, 'StyleSwitcher trigger must render in topbar');
-    await react.act(async () => {
-      switcherTrigger.click();
-    });
-    const pixelOption = [...container.querySelectorAll('[role="menuitemradio"]')].find(el => el.textContent.includes('8-Bit'));
-    assert.ok(pixelOption, '8-Bit preset option must appear in menu');
-    await react.act(async () => {
-      pixelOption.click();
-    });
-
-    assert.equal(win.localStorage.getItem('dsh-stardust:ui-style'), 'pixel8bit');
-    assert.equal(rootSection.getAttribute('data-dsh-style'), 'pixel8bit');
-    // Custom style defers surface tokens to CSS instead of inline overriding --dsw-alias-bg-base
-    assert.equal(rootSection.style.getPropertyValue('--dsw-alias-bg-base'), '');
-
-    // Open FontSwitcher menu and pick songkai
-    const fontTrigger = container.querySelector('.dsh-font-trigger');
-    assert.ok(fontTrigger, 'FontSwitcher trigger must render beside StyleSwitcher');
-    await react.act(async () => {
-      fontTrigger.click();
-    });
-    const songkaiOption = [...container.querySelectorAll('[role="menuitemradio"]')].find(el => el.textContent.includes('中宋+楷书'));
-    assert.ok(songkaiOption, 'Song + Kai font option must appear in FontSwitcher menu');
-    await react.act(async () => {
-      songkaiOption.click();
-    });
-    assert.equal(win.localStorage.getItem('dsh-stardust:ui-font'), 'songkai');
-    assert.equal(rootSection.getAttribute('data-dsh-font'), 'songkai');
-
-    // Picking a custom calendar palette swatch ("极光紫") harmonizes accent without clobbering bg-base
-    const auroraSwatch = container.querySelector('button[aria-label="极光紫"]');
-    assert.ok(auroraSwatch);
-    await react.act(async () => {
-      auroraSwatch.click();
-    });
-    assert.equal(rootSection.style.getPropertyValue('--dsw-alias-accent'), '#7c3aed');
-    assert.equal(rootSection.style.getPropertyValue('--dsw-alias-bg-base'), '');
-
-    // Open New Event dialog (portaled to document.body via HostModal) and verify portal sync + drag exclusion
+    for (const selector of ['.dsh-style-trigger', '.dsh-font-trigger', 'button[aria-label="极光紫"]', '[aria-label="布局"]']) {
+      assert.equal(container.querySelector(selector), null, `${selector} must not render`);
+    }
+    await react.act(async () => { probe.writeDshStyle('gazette', win); });
     let newBtn = null;
     for (let i = 0; i < 30 && !newBtn; i++) {
       newBtn = [...container.querySelectorAll('button')].find(b => b.textContent.trim() === '新建日程' && !b.disabled);
       if (!newBtn) await react.act(async () => new Promise(r => setTimeout(r, 10)));
     }
     assert.ok(newBtn, 'New event button must become enabled');
-    await react.act(async () => {
-      newBtn.click();
-    });
-
+    await react.act(async () => { newBtn.click(); });
     const portalDialog = win.document.body.querySelector('.host-portal-modal[role="dialog"]');
     assert.ok(portalDialog, 'Modal must portal to document.body');
-    assert.equal(portalDialog.getAttribute('data-dsh-style'), 'pixel8bit');
-    assert.equal(portalDialog.getAttribute('data-dsh-font'), 'songkai');
-    assert.equal(portalDialog.hasAttribute('data-window-drag-exclude'), true);
-
-    // Cross-plugin broadcast via writeDshStyle & writeDshFont updates both workbench root and open portaled dialog live
-    await react.act(async () => {
-      probe.writeDshStyle('gazette', win);
-      probe.writeDshFont('fangsong', win);
-    });
-    assert.equal(rootSection.getAttribute('data-dsh-style'), 'gazette');
-    assert.equal(rootSection.getAttribute('data-dsh-font'), 'fangsong');
     assert.equal(portalDialog.getAttribute('data-dsh-style'), 'gazette');
-    assert.equal(portalDialog.getAttribute('data-dsh-font'), 'fangsong');
+    assert.equal(portalDialog.hasAttribute('data-window-drag-exclude'), true);
   } finally {
     await unmount();
   }
@@ -230,7 +168,7 @@ test('floating Launcher and SVG micro-animation icons expose data-window-drag-ex
     assert.equal(floatPanel.hasAttribute('data-window-drag-exclude'), true);
 
     const icons = [...container.querySelectorAll('svg[data-dsh-icon]')].map(el => el.getAttribute('data-dsh-icon'));
-    for (const expected of ['calendar', 'refresh', 'down']) {
+    for (const expected of ['calendar', 'refresh']) {
       assert.ok(icons.includes(expected), `expected SVG icon with data-dsh-icon="${expected}", got ${icons.join(',')}`);
     }
 
@@ -282,15 +220,10 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
     assert.equal(trigger.getAttribute('aria-expanded'), 'false');
     assert.equal(trigger.hasAttribute('aria-haspopup'), false, 'must not set aria-haspopup on coachmark trigger');
 
-    // Wait for first-visit 280ms auto-open timer; verify it does NOT steal focus
+    // The guide never opens by itself
     await react.act(async () => new Promise(r => setTimeout(r, 320)));
-    const autoCard = container.querySelector('[data-tour-card="focus-ribbon"]');
-    assert.ok(autoCard, 'first-visit auto-open must mount step 1 CoachmarkTour after 280ms');
-    assert.equal(trigger.getAttribute('aria-expanded'), 'true');
-    assert.equal(popoverShown >= 1, true, 'tour layer promoted via showPopover()');
-    const tourLayer = container.querySelector('[data-calendar-tour]');
-    assert.equal(tourLayer.getAttribute('popover'), 'manual', 'setAttribute("popover", "manual") applied');
-    assert.notEqual(win.document.activeElement, container.querySelector('[data-tour-next]'), 'auto-open must not hijack focus');
+    assert.equal(container.querySelector('[data-tour-card]'), null, 'no first-visit auto-open');
+    assert.equal(trigger.getAttribute('aria-expanded'), 'false');
 
     // Opening a modal dialog (New Event) immediately closes the auto-opened tour
     let newBtn = null;
@@ -300,7 +233,7 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
     }
     assert.ok(newBtn, 'New event button enabled');
     await react.act(async () => { newBtn.click(); });
-    assert.equal(container.querySelector('[data-tour-card]'), null, 'auto-tour closes immediately when modal opens');
+    assert.equal(container.querySelector('[data-tour-card]'), null, 'no tour while a modal is open');
 
     // Close New Event modal via Escape or Cancel button
     const cancelBtn = [...win.document.body.querySelectorAll('.host-portal-modal button')].find(b => b.textContent.includes('取消'));
@@ -308,7 +241,7 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
     await react.act(async () => { cancelBtn.click(); });
     assert.equal(win.document.body.querySelector('.host-portal-modal'), null);
 
-    // Manually click `? 引导` in topbar: tour opens at step 1/4 and focuses [data-tour-next]
+    // Manually click `? 引导` in topbar: tour opens at step 1/3 and focuses [data-tour-next]
     await react.act(async () => { trigger.click(); });
     const step1Card = container.querySelector('[data-tour-card="focus-ribbon"]');
     assert.ok(step1Card, 'manual trigger opens step 1');
@@ -317,22 +250,15 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
     assert.ok(step1Card.getAttribute('aria-labelledby'));
     assert.ok(container.querySelector('[data-tour-spotlight="focus-ribbon"]'), 'spotlight cutout rendered');
     assert.ok(step1Card.querySelector('[data-tour-arrow]'), 'directional 10x10 arrow rendered');
-    assert.match(step1Card.textContent, /1 \/ 4/);
+    assert.match(step1Card.textContent, /1 \/ 3/);
     assert.match(step1Card.textContent, /今日聚焦条/);
     assert.equal(win.document.activeElement, step1Card.querySelector('[data-tour-next]'), 'manual open focuses Next button');
-
-    // Advance to Step 2 (Bento default layout & styles)
-    await react.act(async () => { container.querySelector('[data-tour-next]').click(); });
-    const step2Card = container.querySelector('[data-tour-card="layout"]');
-    assert.ok(step2Card);
-    assert.match(step2Card.textContent, /2 \/ 4/);
-    assert.match(step2Card.textContent, /Bento 默认布局/);
 
     // Advance to Step 3 (availability & inline 1-click prompt copy)
     await react.act(async () => { container.querySelector('[data-tour-next]').click(); });
     const step3Card = container.querySelector('[data-tour-card="availability"]');
     assert.ok(step3Card);
-    assert.match(step3Card.textContent, /3 \/ 4/);
+    assert.match(step3Card.textContent, /2 \/ 3/);
     const copyPromptBtn = step3Card.querySelector('[data-copy-prompt]');
     assert.ok(copyPromptBtn, 'Step 3 exposes inline 1-click prompt copy button');
     await react.act(async () => { copyPromptBtn.click(); });
@@ -344,7 +270,7 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
     await react.act(async () => { container.querySelector('[data-tour-next]').click(); });
     const step4Card = container.querySelector('[data-tour-card="smart-draft"]');
     assert.ok(step4Card);
-    assert.match(step4Card.textContent, /4 \/ 4/);
+    assert.match(step4Card.textContent, /3 \/ 3/);
     assert.match(step4Card.textContent, /冲突检查与从文字 \/ 截图智能建日程/);
     const doneBtn = step4Card.querySelector('[data-tour-next]');
     assert.match(doneBtn.textContent, /完成引导/);
@@ -385,10 +311,7 @@ test('v3 header, sliding tab indicator, resizable split sidebar, shimmer skeleto
     assert.match(focusRibbon.textContent, /V3 Design Review/, 'Today Focus Ribbon shows next upcoming event');
     assert.match(focusRibbon.textContent, /无时间冲突/, 'Today Focus Ribbon shows conflict-free indicator');
     assert.match(focusRibbon.textContent, /\+ 快速新建/, 'Today Focus Ribbon renders + 快速新建 pill');
-    const layoutPills = [...header.querySelectorAll('[aria-label="布局"] button')].map(b => b.textContent);
-    assert.deepEqual(layoutPills, ['原生', '浮岛', '聚光', 'Bento']);
-    const bentoBtn = [...header.querySelectorAll('[aria-label="布局"] button')].find(b => b.textContent === 'Bento');
-    assert.equal(bentoBtn.getAttribute('aria-pressed'), 'true', 'Bento pill is pressed by default');
+    assert.equal(header.querySelector('[aria-label="布局"]'), null, 'no layout picker in the header');
     assert.match(probe.CSS, /#ececec[\s\S]*#1b4f9c/i, 'win98 platinum toolbar contrast rule present');
 
     const tablist = container.querySelector('[data-dsh-tablist]');
@@ -417,6 +340,39 @@ test('v3 header, sliding tab indicator, resizable split sidebar, shimmer skeleto
     assert.ok(row, 'Agenda view renders [data-dsh-row]');
     assert.ok(row.querySelector('.dsh-pixel-cursor'), 'Agenda row includes pixel8bit cursor');
     assert.ok(row.querySelector('.dsh-row-actions'), 'Agenda row includes .dsh-row-actions');
+  } finally {
+    await unmount();
+  }
+});
+
+test('a read-only connection shows no create or import controls, and each calendar can be hidden', async () => {
+  const day = new Date();
+  day.setHours(12, 0, 0, 0);
+  const at = (hours) => new Date(day.getTime() + hours * 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const { react, probe, render } = await mountEnv({
+    withHostModal: true,
+    connection: { readOnly: true, calendars: [{ id: 'home', name: 'Home', readOnly: true }, { id: 'work', name: 'Work', readOnly: true }] },
+    events: [
+      { uid: 'https://example.test/dav/home/a.ics', summary: 'Home thing', start: at(0), end: at(1), allDay: false, calendarId: 'home', calendarName: 'Home', readOnly: true },
+      { uid: 'https://example.test/dav/work/b.ics', summary: 'Work thing', start: at(2), end: at(3), allDay: false, calendarId: 'work', calendarName: 'Work', readOnly: true },
+    ],
+  });
+  const { container, unmount } = await render(react.createElement(probe.CalendarPanel, { workbench: true }));
+  try {
+    await react.act(async () => new Promise(r => setTimeout(r, 30)));
+    const buttons = () => [...container.querySelectorAll('button')].map(b => b.textContent.trim());
+    assert.equal(buttons().some(text => text.includes('新建日程')), false, 'no New event button');
+    assert.equal([...container.querySelectorAll('[role="tab"]')].some(tab => tab.textContent.includes('导入')), false, 'no Import tab');
+    const cell = container.querySelector('.dshc-cell');
+    assert.ok(cell);
+    assert.equal(cell.getAttribute('title'), null, 'month cells do not offer to create');
+    const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
+    const work = boxes.find(box => box.closest('label')?.textContent.includes('Work'));
+    assert.ok(boxes.find(box => box.closest('label')?.textContent.includes('Home')) && work, 'one checkbox per calendar');
+    assert.match(container.textContent, /Work thing/);
+    await react.act(async () => { work.click(); });
+    assert.doesNotMatch(container.textContent, /Work thing/, 'unticking a calendar hides its events');
+    assert.match(container.textContent, /Home thing/);
   } finally {
     await unmount();
   }

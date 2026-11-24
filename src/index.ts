@@ -1,4 +1,3 @@
-import { registerUpdates } from '@stardustlc/dsh-updates'
 /**
  * dsh-calendar —— CalDAV 日历工具插件（node 半身，配置走 cordis.patch.yml）。
  *
@@ -17,7 +16,7 @@ import { connectionFile, readConnectionFile, writeConnectionFile } from './store
 import { Config as ConfigSchema, liveConfig } from './host-config.js'
 import { CalendarImportBackend } from './import-web.js'
 import { dirname, join } from 'node:path'
-import { resolveCalendarCaller, createPersonSettingsFace, personStorageKey, type CalendarPersonCaller, type RequestIdentityLike } from './people.js'
+import { resolveCalendarCaller, createPersonSettingsFace, peopleEnabled, personStorageKey, type CalendarPersonCaller, type RequestIdentityLike } from './people.js'
 import { installAuthenticatedCalendar } from './transport.js'
 import { nativeDraftModel } from './quick-draft.js'
 import { entryIdOf, installLegacySettingsImport, isFormsProvider, isLegacyProvider, settingsProviderOf } from './host-settings.js'
@@ -141,8 +140,6 @@ export function attachSettings(ctx: CalendarPluginContext, cfg: CalendarConfig):
  * @param config - 插件配置（可缺省）。
  */
 export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null): void {
-  registerUpdates(ctx, { name: "dsh-calendar" })
-
   // 0.1.7 的宿主把 volatile 字段交成引用；摊平之后老宿主的字面量配置走同一条路。
   const cfg = liveConfig(config ?? {})
   try {
@@ -171,6 +168,10 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
   const attached = attachSettings(ctx, cfg)
   const configOf = (): CalendarConfig => ({ ...cfg, ...toCalendarConfig(attached.face.read() as Partial<CalendarSettingsValue> | undefined, null) })
 
+  // A people map means per-person connections, so it turns per-user mode on by itself.
+  const perUser = cfg.perUser === true || peopleEnabled(cfg)
+  // Read at each request: the map's fields are live, so an edit applies without a reload.
+  const people = { get people() { return cfg.people }, get peopleFile() { return cfg.peopleFile }, get peopleKey() { return cfg.peopleKey } }
   const personFaces = new Map<string, CalendarSettingsFace>()
   const identityProvider = (): RequestIdentityLike | undefined => {
     try { return ctx.get?.('requestIdentity') ?? undefined } catch { return undefined }
@@ -191,10 +192,10 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
     return {...value,perUser:true,readOnly:cfg.readOnly===true||value.readOnly===true}
   }
   const toolConfigOf = (): CalendarConfig => {
-    if(!cfg.perUser)return configOf()
+    if(!perUser)return configOf()
     // Model arguments and arbitrary session fields are not identity authorities.
     // A multi-user tool needs a trusted identity provider active in its driver chain.
-    const caller=resolveCalendarCaller(undefined,identityProvider())
+    const caller=resolveCalendarCaller(undefined,identityProvider(),people)
     if(caller.kind!=='person')throw new Error('Verified calendar tool identity required')
     return personConfig(caller)
   }
@@ -228,16 +229,17 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
     settingsBase: toSettingsBase(cfg),
     settingsNs: attached.ns,
     draftModel: () => llm ? nativeDraftModel(llm, attachments) : undefined,
+    floatingButton: () => cfg.floatingButton,
     ...(attached.reason !== undefined ? { settingsReason: attached.reason } : {}),
   })
   const ownerImports=new CalendarImportBackend({config:()=>backend.currentConfig()})
   const privateBackends=new Map<string,{settings:CalendarSettingsBackend;imports:CalendarImportBackend}>()
   try {
     // Legacy local-only routes are never mounted in per-user mode.
-    if(!cfg.perUser)installCalendarSettingsWeb(ctx, backend)
+    if(!perUser)installCalendarSettingsWeb(ctx, backend)
     installAuthenticatedCalendar(ctx,principal=>{
-      if(!cfg.perUser)return {settings:backend,imports:ownerImports}
-      const caller=resolveCalendarCaller(principal,identityProvider())
+      if(!perUser)return {settings:backend,imports:ownerImports}
+      const caller=resolveCalendarCaller(principal,identityProvider(),people)
       if(caller.kind==='owner') {
         if(!cfg.allowOwnerFallback)throw new Error('Per-user calendar requests require a verified person')
         return {settings:backend,imports:ownerImports}
@@ -245,13 +247,13 @@ export function apply(ctx: CalendarPluginContext, config?: CalendarConfig | null
       const key=personStorageKey(caller.subject)
       let entry=privateBackends.get(key)
       if(!entry){
-        const settings=new CalendarSettingsBackend({config:()=>personConfig(caller),settings:personFace(caller),env:{},draftModel:()=>llm?nativeDraftModel(llm,attachments):undefined})
+        const settings=new CalendarSettingsBackend({config:()=>personConfig(caller),settings:personFace(caller),env:{},preferences:true,floatingButton:()=>cfg.floatingButton,draftModel:()=>llm?nativeDraftModel(llm,attachments):undefined})
         entry={settings,imports:new CalendarImportBackend({config:()=>settings.currentConfig(),env:{}})}
         if(privateBackends.size>=128)privateBackends.delete(privateBackends.keys().next().value!)
         privateBackends.set(key,entry)
       }
       return entry
-    }, cfg.perUser === true)
+    }, perUser)
   } catch (error) {
     console.warn('dsh-calendar: 面板路由未挂载：' + (error instanceof Error ? error.message : String(error)))
   }

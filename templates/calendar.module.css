@@ -11,14 +11,20 @@
 .dshc-root[data-main="true"] {
   height: 100%;
   padding-block-start: var(--dsh-frame-top-clearance, 0px);
-  padding-inline-start: var(--dsh-frame-leading-clearance, 0px);
 }
+/* The host's window controls only overlap the first row, so only that row keeps clear of them. */
+.dshc-root[data-main="true"] .topbar { padding-inline-start: calc(12px + var(--dsh-frame-leading-clearance, 0px)); }
 
 .dshc-root *, .dialog *, .dshc-float, .dshc-fab { box-sizing: border-box; }
 .dshc-root:focus-visible, .dshc-root :focus-visible, .dialog :focus-visible, .dshc-fab:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: -2px;
 }
+
+/* UI chrome is not selectable (like the other DSH pages); fields and event text still are. */
+.dshc-root, .dshc-fab, .dialog { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.dshc-root :is(input, textarea, select, [contenteditable="true"]), .dialog :is(input, textarea, select, [contenteditable="true"]), .selectable { -webkit-user-select: text; user-select: text; }
+.dshc-root :is(button, [role="tab"], [role="button"], label) { touch-action: manipulation; }
 
 .dshc-shell {
   container-type: inline-size;
@@ -262,38 +268,6 @@
   color: var(--dsw-alias-link);
   text-align: start;
 }
-.railUpdates { flex: none; max-height: 45%; overflow: auto; }
-.railUpdates:empty { display: none; }
-.railUpdates :global(.plugin-updates-footer) {
-  --w-bg: var(--dsw-alias-bg-layer-1);
-  --w-soft: var(--dsw-alias-bg-layer-2);
-  --w-text: var(--dsw-alias-label-primary);
-  --w-muted: var(--dsw-alias-label-secondary);
-  --w-border: var(--dsw-alias-border-l2);
-  --w-accent: var(--dsw-alias-state-business-primary);
-  --w-primary: var(--dsw-alias-button-primary-fill);
-  --w-on-primary: var(--dsw-alias-button-primary-ink, var(--dsw-alias-bg-base));
-  margin: 0;
-  padding: 9px 12px;
-  border-block-start: 0.5px solid var(--dsw-alias-border-l2);
-  font-size: 11px;
-}
-.railUpdates :global(.plugin-updates-footer .updates-head) { align-items: center; gap: 4px 8px; }
-.railUpdates :global(.plugin-updates-footer h2) { font-size: 11px; line-height: 1.4; }
-.railUpdates :global(.plugin-updates-footer .updates-subtitle) { margin: 0; font-size: 10px; }
-.railUpdates :global(.plugin-updates-footer .w-button) { padding: 3px 7px; min-height: 24px; border: 0; font-size: 11px; }
-.railUpdates :global(.plugin-updates-footer .w-button.w-primary) { color: var(--dsw-alias-button-primary-ink, var(--dsw-alias-bg-base)); }
-.railUpdates :global(.plugin-updates-footer .updates-head .w-button) { padding-inline: 0; background: transparent; color: var(--dsw-alias-link); }
-.railUpdates :global(.plugin-updates-footer .updates-settings) { grid-template-columns: minmax(0, 1fr); }
-.railUpdates :global(.plugin-updates-footer .updates-options) { margin-top: 4px; }
-.railUpdates :global(.plugin-updates-footer .updates-options > summary) { font-size: 11px; }
-.railUpdates :global(.plugin-updates-footer .updates-notes) { border: 0.5px solid var(--dsw-alias-border-l2); }
-.railUpdates :global(.plugin-updates-footer .w-overlay) {
-  justify-content: center;
-  align-items: center;
-  background: var(--dsw-alias-bg-mask-1);
-}
-.railUpdates :global(.plugin-updates-footer .w-dialog) { border: 0; box-shadow: var(--dsw-elevation-prominent); }
 
 .workspacePanel, .scheduleMain, .calendarSurface, .weekView {
   display: flex;
@@ -431,7 +405,8 @@
 .shortcutHints, .shortcutHints > span { display: flex; align-items: center; gap: 4px; }
 .shortcutHints { flex-wrap: wrap; gap: 4px 10px; margin-inline-start: auto; }
 
-.dshc-agenda { display: grid; gap: 16px; padding: 10px 14px 20px; }
+.dshc-agenda { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 10px 14px 20px; }
+.dshc-agenda > *, .dshc-daygroup, .dshc-row, .dshc-main { min-width: 0; max-width: 100%; }
 .dshc-daygroup { display: grid; gap: 4px; }
 .dshc-daylabel { display: flex; align-items: center; gap: 7px; }
 .dshc-row {
@@ -1196,19 +1171,22 @@ button.focusConflictPill {
 @container (max-width: 620px) {
   .dshc-title { display: none; }
   .dshc-chip :global(.t) { display: none; }
+  /* The grid and the agenda already navigate by month: the mini calendar would push them a screen down. */
+  .miniCalendar { display: none; }
   .dshc-toolbar { gap: 6px; }
   .schedule { display: flex; flex-direction: column; overflow: auto; }
   .rail { flex: none; border-inline-end: 0; border-block-end: 0.5px solid var(--dsw-alias-border-l2); }
   .railHandle { display: none; }
-  .railScroll { display: grid; grid-template-columns: minmax(168px, 220px) minmax(0, 1fr); overflow: visible; gap: 12px; }
+  .railScroll { display: grid; grid-template-columns: minmax(0, 1fr); overflow: visible; gap: 12px; }
+  .railScroll > * { min-width: 0; }
+  .calendarSource .dshc-check > span { white-space: normal; overflow-wrap: anywhere; }
   .railSection { margin-block-start: 0; }
-  .railUpdates { max-height: 195px; }
   .scheduleMain, .calendarSurface, .calendarSurface > [role="tabpanel"], .weekView { flex: none; }
   .calendarSurface { overflow: visible; }
   .dshc-root[data-main="true"] .dshc-week { flex: none; max-height: 440px; }
   .dshc-cell { min-height: 82px; padding-inline: 3px; }
   .dshc-chip { padding-inline: 2px; }
-  .topbar { padding-inline: 8px; gap: 6px; }
+  .topbar, .dshc-root[data-main="true"] .topbar { padding-inline: 8px; gap: 6px; }
   .topbar > [role="tablist"] { order: 3; width: 100%; overflow-x: auto; }
   .topbar > [role="tablist"] > [role="tab"] { flex: none; padding-inline: 6px; font-size: 12px; white-space: nowrap; }
   .topActions { gap: 4px; }
@@ -1224,5 +1202,18 @@ button.focusConflictPill {
   .workspacePage { padding-inline: 10px; }
   .card { padding-inline: 10px; }
   .formGrid { grid-template-columns: minmax(0, 1fr); }
-  .railScroll { grid-template-columns: minmax(150px, 1.1fr) minmax(0, 1fr); gap: 8px; padding-inline: 8px; }
+  .railScroll { gap: 8px; padding-inline: 8px; }
+}
+
+/* Touch: bigger targets, and no keyboard hints where there is no keyboard. */
+@media (pointer: coarse) {
+  .dshc-root .dshc-btn, .dshc-root [role="tab"] { min-height: 40px; }
+  .dshc-root .dshc-check { min-height: 40px; }
+  .dshc-row { min-height: 48px; }
+  .shortcutHints, .triggerKey { display: none; }
+}
+@container (max-width: 620px) {
+  .dshc-agenda { padding-inline: 8px; }
+  .dshc-row { flex-wrap: wrap; }
+  .dshc-name, .dshc-meta { white-space: normal; overflow-wrap: anywhere; }
 }

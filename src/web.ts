@@ -13,7 +13,7 @@
  * 面板要的是「事件列表 + 增删改」，所以这一层不做自己的状态：每次请求都问
  * CalDAV 服务器要，服务器就是唯一真相。缓存的只有 service 实例（token 复用）。
  */
-import { resolveConfig, type CalendarConfig } from './config.js'
+import { passwordFromFile, resolveConfig, type CalendarConfig } from './config.js'
 import { CalendarSettingsSchema, SETTINGS_NAMESPACE, draftToConfig, validateSettingsValue, type CalendarSettingsValue } from './settings.js'
 import { createConnectionService, connectionCollections } from './connections.js'
 import { discoverICloud } from './icloud.js'
@@ -175,6 +175,10 @@ export interface CalendarSettingsBackendOptions {
    * 0.1.7 起是 entry id（默认 `calendar`）—— 懒接入这条退路要靠它才认得出自己那一行。
    */
   settingsNs?: string
+  /** The row's `floatingButton`: the default for everyone who has not chosen. */
+  floatingButton?: () => boolean | undefined
+  /** A person's own backend: their display preferences are kept in their connection file. */
+  preferences?: boolean
 }
 
 /** 把「已存值 + 草稿」合并成要落盘的一版：草稿里缺席的键保留原值。 */
@@ -305,6 +309,8 @@ export class CalendarSettingsBackend {
       configured,
       ...(reason !== undefined ? { reason } : {}),
       readOnly: effective.readOnly === true,
+      floatingButton: typeof stored.floatingButton === 'boolean' ? stored.floatingButton : this.options.floatingButton?.() !== false,
+      floatingButtonEditable: this.options.preferences === true && this.settings?.replace !== undefined,
       calendars: collections.map(row => ({ id: row.id, name: row.name ?? row.id, readOnly: !!effective.readOnly || !!row.readOnly })),
       settingsAvailable: this.settings !== undefined,
       ...(this.settings?.kind !== undefined ? { settingsKind: this.settings.kind } : {}),
@@ -321,10 +327,20 @@ export class CalendarSettingsBackend {
       clientId: text('clientId'),
       tokenUrl: text('tokenUrl'),
       proxyUrl: text('proxyUrl'),
-      hasPassword: hasCredential('password', 'DSH_CALENDAR_PASSWORD'),
+      hasPassword: hasCredential('password', 'DSH_CALENDAR_PASSWORD') || passwordFromFile(text('passwordFile')) !== undefined,
       hasClientSecret: hasCredential('clientSecret', 'DSH_CALENDAR_CLIENT_SECRET'),
       hasRefreshToken: hasCredential('refreshToken', 'DSH_CALENDAR_REFRESH_TOKEN'),
     }
+  }
+
+  /** Keep a person's display preference next to their connection, every other key untouched. */
+  private async setPreferences(body: Record<string, unknown>): Promise<unknown> {
+    if (typeof body.floatingButton !== 'boolean') throw new Error('floatingButton must be true or false')
+    const face = this.settings
+    if (this.options.preferences !== true || face?.replace === undefined) throw new Error('This preference is set in the calendar row of the profile (floatingButton).')
+    const stored = (face.read?.() ?? {}) as Record<string, unknown>
+    await face.replace({ ...stored, floatingButton: body.floatingButton }, face.descriptor?.()?.revision ?? 0)
+    return { connection: this.connection() }
   }
 
   /** 兼容旧动作名：status 就是连接摘要。 */
@@ -339,7 +355,7 @@ export class CalendarSettingsBackend {
   private proposed(draft: Record<string, unknown>): { stored: Record<string, unknown>; config: CalendarConfig } {
     const storedValue = ((this.settings?.read?.() ?? {}) as Record<string, unknown>)
     // Policy/collection metadata is server-owned and never comes from form input.
-    const policy = Object.fromEntries(['readOnly', 'calendars', 'writeCalendar'].filter(key => Object.hasOwn(storedValue, key)).map(key => [key, storedValue[key]]))
+    const policy = Object.fromEntries(['readOnly', 'calendars', 'writeCalendar', 'passwordFile', 'floatingButton'].filter(key => Object.hasOwn(storedValue, key)).map(key => [key, storedValue[key]]))
     const stored = { ...policy, ...mergeConnection(storedValue, draft) }
     const config = { ...this.configOf(), ...draftToConfig(stored as Partial<CalendarSettingsValue>) }
     // null is an explicit credential removal. configOf() may still expose the
@@ -448,6 +464,7 @@ export class CalendarSettingsBackend {
     const action = typeof body.action === 'string' ? body.action : ''
     if (['create', 'update', 'delete'].includes(action) && this.configOf().readOnly) throw new Error('日历连接为只读 / Calendar connection is read-only')
     if (action === 'status' || action === 'connection') return this.connection()
+    if (action === 'setPreferences') return await this.setPreferences(body)
     if (action === 'discoverICloud') {
       const draft = connectionDraft(body)
       const current = this.configOf()

@@ -29,6 +29,12 @@ export const Config: z = z.object({
   perUser: z.boolean(),
   allowOwnerFallback: z.boolean(),
   connectionsDir: z.string(),
+  /** Verified sign-in id -> person id (several sign-ins may share one person); read per request. */
+  people: z.dict(z.string()).volatile(),
+  peopleFile: z.string().volatile(),
+  peopleKey: z.string().volatile(),
+  /** `false` hides the floating calendar button by default; a person's own choice wins. */
+  floatingButton: z.boolean().volatile(),
   readOnly: z.boolean().volatile(),
   calendars: calendarCollectionsSchema.volatile(),
   writeCalendar: z.string().volatile(),
@@ -36,6 +42,7 @@ export const Config: z = z.object({
   caldavUrl: z.string().volatile(),
   username: z.string().volatile(),
   password: z.string().role('secret').volatile(),
+  passwordFile: z.string().volatile(),
   host: z.string().volatile(),
   user: z.string().volatile(),
   calendar: z.string().volatile(),

@@ -102,6 +102,10 @@ export interface CalendarSettingsBackendOptions {
      * 0.1.7 起是 entry id（默认 `calendar`）—— 懒接入这条退路要靠它才认得出自己那一行。
      */
     settingsNs?: string;
+    /** The row's `floatingButton`: the default for everyone who has not chosen. */
+    floatingButton?: () => boolean | undefined;
+    /** A person's own backend: their display preferences are kept in their connection file. */
+    preferences?: boolean;
 }
 /** 把「已存值 + 草稿」合并成要落盘的一版：草稿里缺席的键保留原值。 */
 export declare function mergeConnection(stored: Record<string, unknown>, draft: Record<string, unknown>): Record<string, unknown>;
@@ -141,6 +145,8 @@ export declare class CalendarSettingsBackend {
      * 未配置时 configured:false + reason（resolveConfig 的中文指引），面板据此渲染引导态。
      */
     connection(): Record<string, unknown>;
+    /** Keep a person's display preference next to their connection, every other key untouched. */
+    private setPreferences;
     /** 兼容旧动作名：status 就是连接摘要。 */
     status(): Record<string, unknown>;
     /**

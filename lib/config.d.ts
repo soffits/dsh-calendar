@@ -1,9 +1,3 @@
-/**
- * 日历插件配置解析：provider 预设 + 手填 URL，全部在调用时惰性解析。
- * 配置缺失绝不阻止插件加载，只在工具 execute 时抛出带中文指引的错误。
- *
- * @module dsh-calendar/config
- */
 /** 支持的 provider 预设。 */
 export type CalendarProvider = 'google' | 'icloud' | 'nextcloud' | 'custom';
 export type CalendarAuthMethod = 'basic' | 'oauth';
@@ -37,6 +31,13 @@ export interface CalendarConfig {
     /** Opt-in legacy owner access in per-user mode; default is to require a person. */
     allowOwnerFallback?: boolean;
     connectionsDir?: string;
+    /** Map of verified sign-in id -> person id; several sign-ins may share one person. Turns on per-person mode. */
+    people?: Record<string, string>;
+    /** JSON file holding such a map (an object under `peopleKey` when set); read on every request. */
+    peopleFile?: string;
+    peopleKey?: string;
+    /** `false` hides the floating calendar button by default; a person's own `floatingButton` setting wins. */
+    floatingButton?: boolean;
     /** provider 预设；默认 custom。 */
     provider?: CalendarProvider;
     /** 完整日历集合 URL；custom / icloud 必填，google / nextcloud 可由此手填覆盖预设。 */
@@ -45,6 +46,8 @@ export interface CalendarConfig {
     username?: string;
     /** Basic 密码；支持 DSH_CALENDAR_PASSWORD。iCloud 请用应用专用密码；Google 不支持 Basic。 */
     password?: string;
+    /** File holding the password, read on the server when a connection is built (used when `password` is empty). */
+    passwordFile?: string;
     /** google 默认 oauth，其他 provider 默认 basic；Google 不允许 basic。 */
     authMethod?: CalendarAuthMethod;
     /** OAuth 客户端 ID；也可用 DSH_CALENDAR_CLIENT_ID。 */
@@ -99,6 +102,8 @@ export declare function resolveConfig(config: CalendarConfig | undefined, env?: 
 export declare function resolveAuthMethod(config: CalendarConfig | undefined): CalendarAuthMethod;
 /** OAuth 凭据与 Bearer token 仅允许发往无 URL 内嵌凭据的 HTTPS 端点。 */
 export declare function validateOAuthUrl(value: string, field: string): void;
+/** The password kept in `passwordFile`; a missing or unreadable file counts as no password. */
+export declare function passwordFromFile(file: string | undefined): string | undefined;
 /** 独立解析认证，供离线健康检查复用；不会发起网络请求或回显凭据。 */
 export declare function resolveCredentials(config: CalendarConfig | undefined, env?: NodeJS.ProcessEnv): Pick<ResolvedConfig, 'username' | 'password' | 'oauth'>;
 /** 依据 provider 预设或手填字段拼出日历集合 URL。 */
