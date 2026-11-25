@@ -1441,6 +1441,17 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                     setBusy("");
                 }
             };
+            const disconnect = async () => {
+                setBusy("disconnect");
+                setResult(null);
+                try {
+                    onSaved(await api("disconnectConnection", { expectedRevision: connection?.revision }));
+                } catch (error) {
+                    setResult({ ok: false, text: backendMessage(error) });
+                } finally {
+                    setBusy("");
+                }
+            };
             const title = t("conn.title");
             const renderField = key => {
                 const secret = SECRET_FIELDS.includes(key);
@@ -1448,7 +1459,7 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
                 const mayKeep = iCloud && key === "password" ? savedICloudPassword : saved && connection?.[saved];
                 const hintKey = FIELD_HINT[form.provider]?.[key];
                 return h("div", {
-                    key, className: clsx(styles["dshc-field"], ["caldavUrl", "tokenUrl", "proxyUrl"].includes(key) && styles.fullField)
+                    key, className: clsx(styles["dshc-field"], ["caldavUrl", "host", "tokenUrl", "proxyUrl"].includes(key) && styles.fullField)
                 },
                     h("label", { htmlFor: formId + "-" + key }, t(FIELD_LABEL[key])),
                     h(Txt, {
@@ -1508,8 +1519,11 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
             );
             const actions = h("div", { className: styles["dshc-actions"] },
                 h(Btn, { variant: "ghost", onClick: onClose, disabled: busy !== "" }, t("action.cancel")),
+                connection?.configured && maySave ? h(Btn, { variant: "ghost", onClick: disconnect, disabled: busy !== "" },
+                    busy === "disconnect" ? calendarText("正在断开…", "Disconnecting…") : calendarText("断开连接", "Disconnect")) : null,
                 h(Btn, { onClick: test, disabled: busy !== "" || !canConnect }, busy === "test" ? t("conn.testing") : t("conn.test")),
-                h(Btn, { variant: "primary", onClick: save, disabled: busy !== "" || !canConnect || !maySave }, busy === "save" ? t("conn.saving") : t("conn.save"))
+                h(Btn, { variant: "primary", onClick: save, disabled: busy !== "" || !canConnect || !maySave },
+                    busy === "save" ? t("conn.saving") : connection?.disconnected ? calendarText("重新连接", "Reconnect") : t("conn.save"))
             );
             if (inline) return h("section", { className: styles.workspacePage, "aria-label": title, "aria-busy": !!busy },
                 h("div", { className: styles.pageInner },
@@ -2186,13 +2200,16 @@ window.__ModuleLoader__.load({ id: "dsh-calendar", factory: (require) => {
             };
             const startDraft = () => configured === true ? createAt(anchor) : connectFirst();
             const finishConnection = value => {
-                if (value?.connection) setConn(value.connection);
+                if (value?.connection) {
+                    setConn(value.connection);
+                    setConfigured(value.connection.configured === true);
+                }
                 setConnOpen(false);
                 if (connectionOpen) backToSchedule();
                 setDemo(false);
-                setShowCalendar(true);
+                setShowCalendar(!value?.disconnected);
                 reload();
-                notify(t("conn.savedToast"));
+                notify(value?.disconnected ? calendarText("已断开连接，随时可以重新连接。", "Disconnected. You can reconnect anytime.") : t("conn.savedToast"));
             };
             const openEvent = event => {
                 setConfirmDelete(false);

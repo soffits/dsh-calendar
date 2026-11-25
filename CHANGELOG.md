@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.21.5-soffits.1 (2026-11-25)
+
+Merged upstream 0.21.5 (and 0.21.4).
+
+- Disconnect action (`disconnectConnection`) from upstream 0.21.4: suspends Calendar requests and keeps the connection settings.
+- Two-column connection form alignment fix from upstream 0.21.5.
+
 ## 0.21.3-soffits.3 (2026-11-24)
 
 - Read-only connections also hide the Today ribbon's Quick add and the edit button on agenda and all-day rows.
