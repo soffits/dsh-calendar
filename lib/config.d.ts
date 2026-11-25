@@ -38,6 +38,7 @@ export interface CalendarConfig {
     peopleKey?: string;
     /** `false` hides the floating calendar button by default; a person's own `floatingButton` setting wins. */
     floatingButton?: boolean;
+    connectionDisabled?: boolean;
     /** provider 预设；默认 custom。 */
     provider?: CalendarProvider;
     /** 完整日历集合 URL；custom / icloud 必填，google / nextcloud 可由此手填覆盖预设。 */
@@ -91,6 +92,7 @@ export declare const NEXTCLOUD_PATH = "/remote.php/dav/calendars/";
 export declare class ConfigError extends Error {
     constructor(message: string);
 }
+export declare const CONNECTION_DISABLED_MESSAGE = "\u65E5\u5386\u5DF2\u65AD\u5F00\u8FDE\u63A5\uFF0C\u8BF7\u5728\u65E5\u5386\u8BBE\u7F6E\u4E2D\u91CD\u65B0\u8FDE\u63A5\u3002 / Calendar disconnected. Reconnect in Calendar settings.";
 export declare const CALENDAR_PROVIDERS: readonly CalendarProvider[];
 /**
  * 解析配置为可用的 caldavUrl + 凭证。配置缺失抛出 ConfigError（中文指引）。
