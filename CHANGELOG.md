@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.21.6-soffits.1 (2026-11-26)
+
+Merged upstream 0.21.6 and the following theme/font update.
+
+- Per-person settings reads and writes are capped at 1 MiB and reject symlinks or files replaced mid-read (upstream 0.21.6).
+- Default font switches from YouYuan mono to the style-matched sans font (`auto`), with refreshed `mint`, `glass`, `win98` (Mica Fluent) and `frutiger` (Aqua Crystal) skins.
+
 ## 0.21.5-soffits.1 (2026-11-25)
 
 Merged upstream 0.21.5 (and 0.21.4).

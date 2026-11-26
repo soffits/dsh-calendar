@@ -12,7 +12,7 @@ if (!SOURCE.includes('return module.exports;')) {
 }
 const PATCHED = SOURCE.replace('return module.exports;', EXPOSE + '\nreturn module.exports;');
 
-async function mountEnv({ withHostModal = false, darkHost = false, events = [], connection = {} } = {}) {
+async function mountEnv({ withHostModal = false, darkHost = false, events = [], connection = {}, scheduleTour } = {}) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     pretendToBeVisual: true,
     url: 'http://localhost/',
@@ -62,7 +62,10 @@ async function mountEnv({ withHostModal = false, darkHost = false, events = [], 
     },
   };
 
-  new Function('window', 'document', 'navigator', PATCHED)(win, win.document, win.navigator);
+  const schedule = (callback, delay, ...args) => delay === 280 && scheduleTour
+    ? scheduleTour(callback)
+    : setTimeout(callback, delay, ...args);
+  new Function('window', 'document', 'navigator', 'setTimeout', PATCHED)(win, win.document, win.navigator, schedule);
 
   async function render(element) {
     const container = win.document.createElement('div');
@@ -125,6 +128,8 @@ test('the workbench has no theme, font, layout or palette pickers, and dialogs s
   const { win, react, probe, render } = await mountEnv({ withHostModal: true });
   const { container, unmount } = await render(react.createElement(probe.CalendarPanel, { workbench: true }));
   try {
+    assert.equal(probe.DSH_DEFAULT_FONT, 'auto');
+    assert.equal(container.querySelector('.dshc-root').getAttribute('data-dsh-font'), 'auto');
     for (const selector of ['.dsh-style-trigger', '.dsh-font-trigger', 'button[aria-label="极光紫"]', '[aria-label="布局"]']) {
       assert.equal(container.querySelector(selector), null, `${selector} must not render`);
     }
@@ -191,7 +196,11 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
   assert.match(refZh, />=0\.2\.2-rc\.3/);
   assert.match(refEn, />=0\.2\.2-rc\.3/);
 
-  const { win, react, probe, render } = await mountEnv({ withHostModal: true });
+  let openTour;
+  const { win, react, probe, render } = await mountEnv({ withHostModal: true, scheduleTour(callback) {
+    openTour = callback;
+    return 0;
+  } });
   let copiedPrompt = '';
   Object.defineProperty(win.navigator, 'clipboard', {
     value: { async writeText(val) { copiedPrompt = String(val); } },
@@ -222,6 +231,7 @@ test('CoachmarkTour (? 引导), spotlight + directional arrow, inline prompt cop
     assert.equal(trigger.hasAttribute('aria-haspopup'), false, 'must not set aria-haspopup on coachmark trigger');
 
     // The guide never opens by itself
+    assert.equal(openTour, undefined, 'no first-visit auto-open timer scheduled');
     await react.act(async () => new Promise(r => setTimeout(r, 320)));
     assert.equal(container.querySelector('[data-tour-card]'), null, 'no first-visit auto-open');
     assert.equal(trigger.getAttribute('aria-expanded'), 'false');
@@ -313,7 +323,7 @@ test('v3 header, sliding tab indicator, resizable split sidebar, shimmer skeleto
     assert.match(focusRibbon.textContent, /无时间冲突/, 'Today Focus Ribbon shows conflict-free indicator');
     assert.match(focusRibbon.textContent, /\+ 快速新建/, 'Today Focus Ribbon renders + 快速新建 pill');
     assert.equal(header.querySelector('[aria-label="布局"]'), null, 'no layout picker in the header');
-    assert.match(probe.CSS, /#ececec[\s\S]*#1b4f9c/i, 'win98 platinum toolbar contrast rule present');
+    assert.match(probe.CSS, /#e6ecf6[\s\S]*#005fb8/i, 'win98 Mica Fluent backdrop + accent present');
 
     const tablist = container.querySelector('[data-dsh-tablist]');
     assert.ok(tablist, 'workspace tabs expose [data-dsh-tablist]');
