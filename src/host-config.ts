@@ -37,6 +37,7 @@ export const Config: z = z.object({
   caldavUrl: z.string().volatile(),
   username: z.string().volatile(),
   password: z.string().role('secret').volatile(),
+  passwordFile: z.string().volatile(),
   host: z.string().volatile(),
   user: z.string().volatile(),
   calendar: z.string().volatile(),

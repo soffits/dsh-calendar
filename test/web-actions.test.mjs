@@ -295,6 +295,27 @@ test('连接摘要识别环境中的 Basic 密码，留空草稿仍保留环境�
   assert.equal(res.state.raw.includes('fixture-env-password'), false, '只回存在标记，不回传环境密钥');
 });
 
+test('连接摘要把 passwordFile 算作已配置密码，且不回传其内容', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-calendar-pw-'));
+  try {
+    const file = join(directory, 'app-password');
+    writeFileSync(file, 'fixture-file-password\n', { mode: 0o600 });
+    const backend = new CalendarSettingsBackend({
+      config: { provider: 'custom', caldavUrl: 'https://calendar.example/dav/', username: 'fixture', passwordFile: file },
+      env: {},
+    });
+    const res = makeRes();
+    await backend.handle(makeReq({ body: { action: 'connection' } }), res);
+    assert.equal(res.state.body.value.configured, true);
+    assert.equal(res.state.body.value.hasPassword, true);
+    assert.equal(res.state.raw.includes('fixture-file-password'), false);
+    assert.equal(res.state.raw.includes(file), false, 'the path is not sent to the browser either');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('连接摘要识别环境中的 OAuth 密钥并忽略纯空白值', async () => {
   const backend = new CalendarSettingsBackend({
     config: { provider: 'google', calendarId: 'fixture@gmail.com' },

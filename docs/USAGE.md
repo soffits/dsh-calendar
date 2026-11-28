@@ -44,7 +44,7 @@ Harness 0.1.7 及以上通过宿主设置服务写入 profile 中的 `calendar` 
 - `provider`：google | icloud | nextcloud | custom
 - `caldavUrl`：完整日历集合 URL（custom / icloud 必填；google / nextcloud 也可手填覆盖预设）
 - `authMethod`：`basic` | `oauth`；Google 默认且必须为 `oauth`，其他 provider 默认 `basic`。其他 OAuth 服务器需显式设置 `oauth`，不会因环境中存在 Google 凭据而自动切换。
-- `username` / `password`：仅 Basic 认证必需。iCloud 请用应用专用密码；密码推荐用环境变量 `DSH_CALENDAR_PASSWORD`。**Google CalDAV 不接受任何 Basic 密码，包括应用专用密码。**
+- `username` / `password`：仅 Basic 认证必需。iCloud 请用应用专用密码；密码推荐用环境变量 `DSH_CALENDAR_PASSWORD`；也可以用 `passwordFile` 指向存放密码的文件（服务端读取，去掉结尾换行，最大 4 KiB），同时配置时 `password` 优先。**Google CalDAV 不接受任何 Basic 密码，包括应用专用密码。**
 - `clientId` / `clientSecret` / `refreshToken`：OAuth 必需；分别支持 `DSH_CALENDAR_CLIENT_ID` / `DSH_CALENDAR_CLIENT_SECRET` / `DSH_CALENDAR_REFRESH_TOKEN`。非空配置值优先于环境变量。请勿把密钥或令牌提交到 Git。
 - `tokenUrl`：可用 `DSH_CALENDAR_TOKEN_URL`；Google 默认 `https://oauth2.googleapis.com/token`，其他 OAuth 服务必填。OAuth 的 tokenUrl 与 caldavUrl 必须为不含内嵌账号密码、查询参数或片段的 HTTPS 地址。
 - `proxyUrl`：可选 HTTP 代理地址（如 http://127.0.0.1:7890）；令牌刷新和 CalDAV 请求共用该代理。可直连时无需填写。

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, AUTH_DRAFT_ROUTE, AUTH_SETTINGS_ROUTE, createPersonSettingsFace, resolveCalendarCaller } from '../lib/index.js'
@@ -77,6 +77,23 @@ test('person connection saves retain server-side read-only and collection policy
  const write=await f.request({action:'delete',uid:'https://alice.invalid/calendar/x.ics'})
  assert.equal(write.status,400)
  assert.match(write.body.error.message,/read-only/)
+})
+
+test('a person connection can use passwordFile, and a form save keeps it',async t=>{
+ const f=mount(t),caller=resolveCalendarCaller({kind:'user',id:'alice'})
+ const file=join(f.directory,'alice-password');writeFileSync(file,'FILE-SECRET\n',{mode:0o600})
+ const face=createPersonSettingsFace(f.directory,caller)
+ await face.replace({provider:'custom',username:'ALICE',passwordFile:file,caldavUrl:'https://alice.invalid/calendar/'},0)
+ let result=await f.request({action:'connection'})
+ assert.equal(result.body.value.configured,true,result.body.value.reason)
+ assert.equal(result.body.value.hasPassword,true)
+ assert.ok(!JSON.stringify(result.body).includes('FILE-SECRET'))
+ assert.ok(!JSON.stringify(result.body).includes(file))
+ assert.equal((await f.request({action:'saveConnection',username:'ALICE-NEW',test:false})).status,200)
+ assert.equal(face.read().passwordFile,file)
+ assert.equal(face.read().password,undefined)
+ result=await f.request({action:'saveConnection',passwordFile:'/etc/shadow',test:false})
+ assert.equal(face.read().passwordFile,file,'the form cannot point the server at another file')
 })
 
 test('disconnecting one verified person leaves other calendar connections active', async t => {

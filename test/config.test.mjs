@@ -136,3 +136,23 @@ test('invalid auth methods and insecure OAuth endpoints are rejected without ech
     }
   }
 })
+
+test('passwordFile 提供 Basic 密码：去掉结尾换行，password 优先于文件，文件优先于环境变量', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-calendar-pw-'))
+  try {
+    const file = join(directory, 'app-password')
+    writeFileSync(file, 'from-file\n', { mode: 0o600 })
+    const base = { provider: 'custom', username: 'u', caldavUrl: 'https://x/', passwordFile: file }
+    assert.equal(resolveConfig(base, { DSH_CALENDAR_PASSWORD: 'env-pass' }).password, 'from-file')
+    assert.equal(resolveConfig({ ...base, password: 'explicit' }, {}).password, 'explicit')
+    assert.throws(
+      () => resolveConfig({ ...base, passwordFile: join(directory, 'missing') }, {}),
+      (error) => error instanceof ConfigError && /密码/.test(error.message),
+    )
+    writeFileSync(file, 'x'.repeat(5000))
+    assert.throws(() => resolveConfig(base, {}), (error) => error instanceof ConfigError)
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})

@@ -4,6 +4,7 @@
  *
  * @module dsh-calendar/config
  */
+import { readFileSync, statSync } from 'node:fs'
 
 /** 支持的 provider 预设。 */
 export type CalendarProvider = 'google' | 'icloud' | 'nextcloud' | 'custom'
@@ -45,6 +46,8 @@ export interface CalendarConfig {
   username?: string
   /** Basic 密码；支持 DSH_CALENDAR_PASSWORD。iCloud 请用应用专用密码；Google 不支持 Basic。 */
   password?: string
+  /** File holding the Basic password, read on the server when a connection is built. Used when `password` is empty. */
+  passwordFile?: string
   /** google 默认 oauth，其他 provider 默认 basic；Google 不允许 basic。 */
   authMethod?: CalendarAuthMethod
   /** OAuth 客户端 ID；也可用 DSH_CALENDAR_CLIENT_ID。 */
@@ -156,6 +159,16 @@ export function validateOAuthUrl(value: string, field: string): void {
   throw new ConfigError('dsh-calendar 的 OAuth ' + field + ' 必须是有效的 HTTPS 地址，且不能包含账号、密码、查询参数或片段。')
 }
 
+/** Password kept in `passwordFile` (trailing whitespace trimmed); a missing, oversized or unreadable file counts as no password. */
+export function passwordFromFile(file: string | undefined): string | undefined {
+  const path = nonEmpty(file)
+  if (path === undefined) return undefined
+  try {
+    if (statSync(path).size > 4096) return undefined
+    return nonEmpty(readFileSync(path, 'utf8').trim())
+  } catch { return undefined }
+}
+
 /** 独立解析认证，供离线健康检查复用；不会发起网络请求或回显凭据。 */
 export function resolveCredentials(
   config: CalendarConfig | undefined,
@@ -181,7 +194,7 @@ export function resolveCredentials(
     return { username: nonEmpty(config?.username) ?? '', password: '', oauth: { tokenUrl, clientId, clientSecret, refreshToken } }
   }
   const username = nonEmpty(config?.username)
-  const password = nonEmpty(config?.password) ?? nonEmpty(env.DSH_CALENDAR_PASSWORD)
+  const password = nonEmpty(config?.password) ?? passwordFromFile(config?.passwordFile) ?? nonEmpty(env.DSH_CALENDAR_PASSWORD)
 
   if (username === undefined) {
     throw new ConfigError(

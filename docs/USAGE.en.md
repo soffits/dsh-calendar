@@ -67,7 +67,7 @@ All configuration lives in your profile's cordis.patch.yml; override the `calend
 - `provider`: google | icloud | nextcloud | custom
 - `caldavUrl`: full calendar collection URL (required for custom / icloud; google / nextcloud can also override the preset manually)
 - `authMethod`: `basic` | `oauth`; Google defaults to and requires `oauth`, other providers default to `basic`. Opt in explicitly for another OAuth server. Google credentials in the environment never switch a Basic provider to OAuth automatically.
-- `username` / `password`: required only for Basic authentication. Use an app-specific password for iCloud, preferably via `DSH_CALENDAR_PASSWORD`. **Google CalDAV rejects all Basic passwords, including app-specific passwords.**
+- `username` / `password`: required only for Basic authentication. Use an app-specific password for iCloud, preferably via `DSH_CALENDAR_PASSWORD`. `passwordFile` can point to a file holding the password instead (read on the server, trailing newline trimmed, up to 4 KiB); `password` wins when both are set. **Google CalDAV rejects all Basic passwords, including app-specific passwords.**
 - `clientId` / `clientSecret` / `refreshToken`: required for OAuth; also read from `DSH_CALENDAR_CLIENT_ID` / `DSH_CALENDAR_CLIENT_SECRET` / `DSH_CALENDAR_REFRESH_TOKEN`. Non-empty config values take precedence over environment variables. Never commit secrets or tokens to Git.
 - `tokenUrl`: also read from `DSH_CALENDAR_TOKEN_URL`; defaults to `https://oauth2.googleapis.com/token` for Google and is required for other OAuth providers. OAuth tokenUrl and caldavUrl must use HTTPS without embedded credentials, query parameters or fragments.
 - `calendarId`: google-specific, the calendar ID (usually your email)
